@@ -1,0 +1,17 @@
+/*
+ * Benchmark mode only: add USB CDC ACM so the benchmark protocol runs over
+ * the nRF52's USB (one of the two /dev/cu.usbmodem* ports). Applied only when
+ * building with BENCHMARK=ON.
+ */
+/ {
+	chosen {
+		zephyr,benchmark_uart = &cdc_acm_uart0;
+	};
+};
+
+&zephyr_udc0 {
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+		label = "CDC_ACM_0";
+	};
+};

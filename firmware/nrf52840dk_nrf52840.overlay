@@ -1,0 +1,20 @@
+/*
+ * Use RTT for console so UART0 is free for benchmark protocol (no log bytes mixed in).
+ * UART0 baud 115200; host script must use --baud 115200 (default).
+ */
+/ {
+	rtt0: rtt_chan0 {
+		compatible = "segger,rtt-uart";
+		status = "okay";
+	};
+
+	chosen {
+		zephyr,console = &rtt0;
+		zephyr,shell-uart = &rtt0;
+	};
+};
+
+&uart0 {
+	status = "okay";
+	current-speed = <115200>;
+};

@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Firmware: written by build_benchmark.sh so BENCHMARK=ON is seen by child image
+firmware/build_type.cmake
+
+# Markdown files (kept local only)
+*.md
+docs/
+
+# TFLM source (fetched separately via get_tflm.sh)
+firmware/tflm/
+
+# macOS metadata
+.DS_Store

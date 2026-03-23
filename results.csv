@@ -1,0 +1,4 @@
+model,n_windows,arena_kb,mean_us,median_us,std_us,min_us,max_us,throughput,energy_uj,mae_deg
+tcn,100,69.0,940102,940018,1009,938202,942627,1.1,16442.4,27.80
+bilstm_small,100,167.9,26640,26626,68,26529,27113,37.5,465.9,32.24
+pet_small,100,62.6,293424,293338,815,292949,301445,3.4,5132.0,30.23

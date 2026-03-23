@@ -1,0 +1,18 @@
+[project]
+name = "es327"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.3",
+    "pykwalify>=1.8.0",
+    "pyserial>=3.5",
+    "scipy>=1.17.1",
+    "torch>=2.10.0",
+]
+
+[project.optional-dependencies]
+# TensorFlow needed for quantise.py and benchmark --tflite-eval.
+quantise = ["tensorflow>=2.16"]

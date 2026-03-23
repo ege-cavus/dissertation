@@ -1,0 +1,18 @@
+# ES327 application options (Zephyr base is sourced at the end)
+
+mainmenu "ES327 Application Configuration"
+
+menu "ES327"
+
+config ES327_BENCHMARK_MODE
+	bool "Benchmark mode (UART SYNC for benchmark.py)"
+	default n
+	help
+	  When enabled, the firmware waits for SYNC (0xAA) on UART0 and runs
+	  the host-driven benchmark loop instead of the normal inference loop.
+	  Build with: west build ... -- -DCONF_FILE="prj.conf;benchmark.conf"
+
+endmenu
+
+# Pull in Zephyr's Kconfig (defines GPIO, SERIAL, LOG, etc.)
+source "Kconfig.zephyr"

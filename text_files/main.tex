@@ -1,0 +1,1174 @@
+\documentclass[11pt]{article}
+\usepackage{url}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\geometry{
+ a4paper,
+ left=25mm,
+ right=25mm,
+ bottom=25mm,
+ top=25mm,
+}
+\usepackage{setspace}
+\usepackage{parskip}
+\linespread{1.3}
+
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{array}
+\usepackage{multicol}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric,arrows.meta,positioning}
+\usepackage{booktabs}
+\usepackage{pgfgantt}
+
+\usepackage[numbers,sort&compress]{natbib}
+\setlength{\bibsep}{0pt plus 0.3ex}
+\def\bibfont{\footnotesize}
+\setcitestyle{square}
+
+\usepackage[acronym]{glossaries}
+\makeglossaries
+
+\usepackage[toc,page]{appendix}
+
+\def\frontmatter{%
+    \pagenumbering{roman}
+    \setcounter{page}{1}
+    \renewcommand{\thesection}{\Roman{section}}
+}%
+
+\def\mainmatter{%
+    \pagenumbering{arabic}
+    \setcounter{page}{1}
+    \setcounter{section}{0}
+    \renewcommand{\thesection}{\arabic{section}}
+}%
+
+\def\backmatter{%
+    \setcounter{section}{0}
+    \renewcommand{\thesection}{\Alph{section}}
+}%
+
+% ── Acronym definitions ──
+\newacronym{semg}{sEMG}{surface electromyography}
+\newacronym{tcn}{TCN}{Temporal Convolutional Network}
+\newacronym{bilstm}{BiLSTM}{Bidirectional Long Short-Term Memory}
+\newacronym{cnn}{CNN}{Convolutional Neural Network}
+\newacronym{pet}{PET}{Parallel Efficient Transformer}
+\newacronym{mpjpe}{MPJPE}{Mean Per-Joint Position Error}
+\newacronym{mae}{MAE}{Mean Absolute Error}
+\newacronym{fk}{FK}{Forward Kinematics}
+\newacronym{mcp}{MCP}{Metacarpophalangeal}
+\newacronym{pip}{PIP}{Proximal Interphalangeal}
+\newacronym{dip}{DIP}{Distal Interphalangeal}
+\newacronym{ptq}{PTQ}{Post-Training Quantisation}
+\newacronym{qat}{QAT}{Quantisation-Aware Training}
+\newacronym{tflm}{TFLM}{TensorFlow Lite for Microcontrollers}
+\newacronym{afe}{AFE}{Analogue Front-End}
+\newacronym{ina}{INA}{Instrumentation Amplifier}
+\newacronym{cmrr}{CMRR}{Common-Mode Rejection Ratio}
+\newacronym{rms}{RMS}{Root Mean Square}
+\newacronym{mav}{MAV}{Mean Absolute Value}
+\newacronym{wl}{WL}{Waveform Length}
+\newacronym{fpu}{FPU}{Floating-Point Unit}
+\newacronym{dof}{DoF}{Degrees of Freedom}
+
+\begin{document}
+
+\begin{titlepage}
+\begin{center}
+\includegraphics[width=0.2\textwidth]{WarwickAlt.pdf}
+
+\vspace{0.8cm}
+
+{\Large \textbf{Investigating Digit Coordinate Localisation Using Electromyographic Signal Processing and Machine Learning}}\\
+
+\vspace{0.8cm}
+
+\textbf{Ege Cavus}\\
+School of Engineering\\
+University of Warwick\\
+United Kingdom\\
+u5536787\\
+\textbf{\today}
+\end{center}
+\end{titlepage}
+
+\frontmatter
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+\section*{Acknowledgements}
+\addcontentsline{toc}{section}{Acknowledgements}
+% TODO: Fill in acknowledgements.
+
+\section*{Abstract}
+\addcontentsline{toc}{section}{Abstract}
+
+This project investigates digit coordinate localisation from sEMG signals using machine learning deployed on a resource-constrained microcontroller. Five regression architectures — TCN, BiLSTM, CNN-BiLSTM, standard Transformer, and PET — are trained on NinaPro DB1 to predict 22 hand joint angles from 10-channel forearm sEMG. CNN-BiLSTM achieves the best within-subject MPJPE of 0.2591, while all architectures converge to 0.34–0.39 under cross-subject evaluation, with inter-subject electrode placement variation identified as the dominant performance bottleneck. Three models are quantised to INT8 and deployed on a Nordic nRF52840 (64 MHz ARM Cortex-M4F, 256 kB SRAM, 1 MB flash): BiLSTM-small achieves the lowest latency (26.6 ms) and energy consumption (466 µJ/inference) through efficient CMSIS-NN kernel mapping, while PET-small offers the smallest memory footprint (62.6 kB tensor arena). A custom 8-channel sEMG analogue front-end was designed and fabricated for future real-time validation. The results demonstrate that hardware-library compatibility is as important as parameter count when selecting neural architectures for microcontroller deployment.
+
+\section*{Abbreviations}
+\addcontentsline{toc}{section}{Abbreviations}
+\printglossary[type=\acronymtype,title={}]
+
+\clearpage  
+
+\mainmatter
+
+%% ═══════════════════════════════════════════════════════════════
+%%  CHAPTER 1 — INTRODUCTION
+%% ═══════════════════════════════════════════════════════════════
+\section{Introduction}
+
+\subsection{Purpose}
+Smart dexterous hand prostheses that provide life-changing value for prosthetic wearers, and gesture-recognition wearables for the next generation of human--computer interfaces, demand a complex set of requirements for real-world applicability. Lightweight design, comfort, energy efficiency, and low latency have become non-negotiable.
+
+\subsection{Goals}
+The primary goal of this project is to investigate whether digit coordinate localisation, the prediction of the hand and finger key points in space and time, can be achieved reliably using \gls{semg} signals. Unlike vision-based approaches, sEMG does not require a camera, is unaffected by occlusion, and is generally more suitable for applications such as prosthetics, human--computer interaction, and rehabilitation systems.
+
+To investigate the applicability of sEMG-based digit localisation, the following objectives have been set:
+
+\begin{itemize}
+    \item Train and evaluate a suite of regression models (\gls{pet}, XGBoost, 1D-\gls{cnn}, \gls{bilstm}, and \gls{tcn}) on the NinaPro~DB1 dataset; establish accuracy expectations and benchmark the models.
+    \item Port the best-performing model to an nRF52840 development board, investigate the effects of post-training quantisation on accuracy and latency, and derive hardware performance metrics including inference time, latency, and energy consumption.
+    \item Design and fabricate a custom sEMG \gls{afe} board as a proof-of-concept signal acquisition front-end; verify basic hardware functionality; defer live data collection and end-to-end real-time validation to future work.
+    \item Provide a formal comparison of model architectures, identify the strongest candidates for real-time deployment, and yield actionable recommendations for future embedded digit coordination systems.
+\end{itemize}
+
+\subsection{Project Outcomes}
+This project puts forward 7 concrete outcomes. (1) A pipeline that extracts the joint angles and EMG data along with several other metadata such as preparation and prepares them for model ingestion. (2) Five deep learning models trained and evaluated on the pre-processed Ninapro DB1 dataset using within-subject and cross-subject evaluation, considering the 27 subjects in the Ninapro dataset. (3) A quantised embedded deployment of three models onto the nRF52840 microcontroller. (4) An on-device real-time inference benchmark that evaluates and compares the embedded performance metrics, including latency, throughput, and energy usage estimations. (5) A proof-of-concept PCB Design for an Analogue Front-End for future real-time data acquisition and noise evaluation of models (7) A discussion of the trade-offs between model accuracy, quantisation and hardware constraints in real-time sEMG-based digit localisation.
+
+%% ═══════════════════════════════════════════════════════════════
+%%  CHAPTER 2 — LITERATURE REVIEW
+%% ═══════════════════════════════════════════════════════════════
+\section{Literature Review}
+
+\subsection{Basic Principles of Hand Mobility}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.45\textwidth]{hand_keypoints.png}
+\caption{Hand joint keypoints across all fingers and the wrist (source: ResearchGate).}
+\label{fig:hand_keypoints}
+\end{figure}
+
+Human hand movement is generated through the coordinated action of extrinsic and intrinsic muscles acting across multiple joints of the wrist, palm, and fingers. The anatomical system of the hand is high-dimensional, meaning it has many independent or semi-independent moving parts that require a larger output space for any prediction effort. However, the 21 \gls{dof} across the wrist, \gls{mcp}, \gls{pip}, and \gls{dip} joints often exhibit structured coordination that presents learnable features or latent patterns within hand motions and postures. These patterns are also called \emph{synergies}, meaning that the motor system does not independently command every joint in isolation at a muscle group level. Studies on both muscular and kinematic synergies suggest that hand control reflects low-dimensional organisation, meaning a small number of independent variables can represent information on the joint, which captures dominant grasping strategies while preserving enough variability for dexterous behaviour \cite{scano2018muscle,jarquebou2019kinematic,brambilla2023spatial,pale2020variability}.
+
+This low-dimensional structure has implications for predicting finger position from sEMG. Scano et al.\ \cite{scano2018muscle} showed that only a small number of muscle synergies, as few as two to five, can explain most of the EMG variations across 52 hand grasps in the NinaPro dataset used in this project. Jarque-Bou et al.\ \cite{jarquebou2019kinematic} similarly found that joint angle trajectories can be represented using only a few kinematic synergies, with the first two principal components mainly describing overall hand opening and wrist orientation. Since the ground truth data in NinaPro are joint angles measured by the CyberGlove, this suggests that regression from a small number of forearm sEMG channels that capture the latent patterns mapping to a 22-dimensional joint angle space can be feasible in theory.
+
+The muscle synergy structure also explains an important non-uniformity in prediction performance. Gross movements, such as overall grasp formation and power grips, tend to be predicted more reliably from sEMG than fine individual movements, such as isolated finger extensions \cite{jarquebou2019kinematic,pale2020variability}. This suggests that fingertip-level motion is less directly determined by forearm muscle synergies. This effect is reflected in the per-joint error distribution reported in Chapter~6, where MCP joint angles are predicted more accurately than DIP-level fingertip motion across subjects and movement categories.
+
+\subsection{Forward Kinematics and Measurement Methodology}
+\label{sec:fk}
+To represent the hand pose quantitatively, a kinematic model for the hand needs to be devised. \gls{fk} provides a way to use: (1) joint angles, (2) link lengths between adjacent joints, which occasionally correspond to bone lengths, (3) a kinematic chain in the form of an ordered list of joints and links that explain the relative relationship between them to generate the 3D positions of the joints and keypoints.
+
+Mathematically speaking, for a kinematic chain with joint vector $\mathbf{q}$, the position of a point on the hand can be written as
+\begin{equation}
+\mathbf{x} = f(\mathbf{q}),
+\end{equation}
+where $f(\cdot)$ is determined by the link geometry and joint definitions. To express rotation and translation between adjacent hand segments within a single matrix structure we can use homogeneous coordinates, which are expressed as $(x, y, z, 1)$. The addition of the extra coordinate allows us to combine translation and rotation in a single $4 \times 4$ transformation matrix; more simply, we can do both transformation through a single matrix multiplication. For example,
+\begin{equation}
+\begin{bmatrix} x' \\ y' \\ z' \\ 1 \end{bmatrix}
+=
+\begin{bmatrix} R & t \\ 0 & 1 \end{bmatrix}
+\begin{bmatrix} x \\ y \\ z \\ 1 \end{bmatrix},
+\end{equation}
+where $R$ is the rotation part and $t$ is the translation vector. This matrix can help us access the new point that is translated and rotated from the original point. In terms of the kinematic chain, a point at a distance can be expressed as
+\begin{equation}
+\mathbf{T}_{0n} = \prod_{i=1}^{n} \mathbf{T}_{i-1,i}(\theta_i),
+\end{equation}
+where each transformation matrix $\mathbf{T}_{i-1,i}$ describes the effect of one joint or link. The point of interest is therefore the multiplication of all transformations up to that point.
+
+For this project, the kinematic representation is determined by the NinaPro~DB1 dataset, which records hand pose using a CyberGlove with 22 angular sensors covering the major degrees of freedom of the hand and wrist. These 22 angles, converted to radians and mapped to anatomical ranges of motion, form the prediction target for every model implemented in this project. Predicting the 22-dimensional angle vector is more sensible as it is directly comparable with the joint angle ground truth of the same dimension.
+
+Forward kinematics is applied exclusively during \emph{evaluation}, as a post-processing step to compute a spatially meaningful error metric. This decision also keeps the on-device computation minimal as the pre-processing workload is fully omitted, easing the memory budget for the models. Performance is then evaluated using \gls{mpjpe}, the average Euclidean distance between predicted and ground-truth keypoint positions.
+
+\gls{mpjpe} was picked over raw angle \gls{mae} for offline reporting because it can capture the compounding effect of angle errors along the kinematic chain, providing a practically interpretable insight into prediction performance in real-life implementations such as HCIs and prosthetics. This also allows comparison of the granular per-joint prediction. The forward kinematics model uses normalised anatomical units calibrated to human hand proportions. The index proximal phalanx — the longest and most consistently measurable bone in the index finger — serves as the reference segment, assigned a length of 0.65 units ( $\sim$ 40 mm in an average adult hand), yielding a scale factor of approximately 61.5 mm per unit used throughout to convert MPJPE values into millimetres, therefore this evaluation does not account to variations in bone-length. 
+
+\subsection{Electromyographic Sensors and Signal Processing}
+\label{sec:emg}
+\Gls{semg} measures the summed electrical activity generated by motor unit action potentials (brief voltage spikes produced when a group of muscle fibres controlled by a single nerve fibre contract together) detected at the skin surface. In simplified form, the measured signal can be written as
+\begin{equation}
+x(t) = s(t) + n(t),
+\end{equation}
+where $s(t)$ is the physiological component and $n(t)$ includes motion artefacts, electrode effects, ambient interference, and noise. The raw differential signal at the skin surface is typically in the range of 0.1--5\,mV with a useful frequency content of approximately 10--500\,Hz. Because sEMG is stochastic (its amplitude and timing vary randomly even for the same repeated movement), non-stationary, and sensitive to electrode placement, both analogue conditioning and digital preprocessing are critical.
+
+\subsubsection{Analogue Signal Conditioning}
+Before digital processing, the sEMG signal must be amplified and filtered to bring it within the analogue-to-digital converter input range. The NinaPro~DB1 setup handles this internally via the Delsys Trigno system. The custom \gls{afe} designed for this project (Chapter~5) implements these functions using the TI ADS1298 integrated biopotential AFE \cite{ads1298datasheet}, which provides built-in programmable-gain differential amplifiers (gain set to 6), an on-chip right-leg drive (RLD) amplifier for active common-mode cancellation of 50\,Hz mains interference, and internal sigma-delta ADC filtering — replacing discrete instrumentation amplifiers and external bandpass filters with a single IC. This makes the signal quality comparable the with the preprocessing pipeline described in Chapter~3.
+
+
+
+\subsection{Dataset Selection}
+The NinaPro (Non-Invasive Adaptive Prosthetics) dataset family is a publicly available benchmark specifically designed for non-invasive hand prosthesis research. \cite{atzori2014ninapro,atzori2015resource}. 
+
+\subsubsection{NinaPro DB1}
+NinaPro DB1 is the primary dataset used in this project \cite{ninaprodb1}. It contains recordings from 27 subjects with intact arms who performed 52 hand and wrist movements. These movements are organised into three exercise blocks to extract different muscle activation patterns. sEMG data were recorded at 100 Hz from a 10-channel Delsys Trigno wireless EMG acquisition system with its electrode positioned circumferentially around the forearm. Hand kinematics, which form the ground truth, were recorded simultaneously using a 22-sensor CyberGlove II in the form of 22 joint angles per timestep. While the Cyberglove samples 25 Hz natively, the data is super-sampled, essentially by interpolation to match the 100 Hz EMG timeseries.
+ Each movement was repeated six times with rest periods between repetitions to yield non-fatigued EMG responses, effectively yielding a balanced training and validation split. NinaPro DB1 was selected as the central dataset for the scope of this project since it provides both the kinematic labels in joint angles and the EMG inputs, which are essential for the design of any regression-based digit localisation system. 
+Another reason is the fact that the 52-movement protocol covers a range of functional grasps and individual finger movements that present a diverse set of potential latent features that can be learned by the models. Thirdly, there is existing literature which used DB1 as a benchmark in deep learning studies on continuous kinematic estimation \cite{jiang2024efficient,lin2025parallel}, making it possible to compare model performance results among published work.
+
+
+
+\subsection{Neural Networks and the Transformer Architecture}
+\label{sec:nn_background}
+
+
+\subsubsection{How Neural Networks Learn}
+A neural network is a function built from layers of simple units called \emph{neurons}. Each neuron multiplies its inputs by learned weights, sums them, and passes the result through a nonlinear function (the \emph{activation}). Stacking many layers creates a \emph{deep} network that can approximate complex input--output relationships. Training adjusts the weights by computing how wrong the output is (the \emph{loss}), then propagating that error backwards through the layers (a procedure known as \emph{backpropagation}) and adjusting each weight in the direction that reduces prediction error.
+
+The advantage of deep networks for EMG decoding is that they learn their own feature representations directly from the raw EMG signal window. Classic models such as XGBoost require hand-computed features (e.g.\ RMS, waveform length) before the model can run; a deep network discovers these features automatically during training, generally at a non-intuitive level. Though, deep networks need more data and compute to train, and their internal representations are harder to interpret.
+
+\subsubsection{Sequence Models and the Temporal Structure}
+An sEMG window is a sequence. 200 samples ordered in time across 10 channels. A plain fully connected network treats all inputs equally, ignoring their temporal order. Sequence models are designed to make use of this order. This way time-ordered patterns such as muscle activations, burst durations and simultaneous activation motor units across different channels all become learnable. These would be invisible to a flat input structure.
+
+\subsubsection{Attention and the Transformer}
+The \emph{attention mechanism} is the central idea behind transformers. Rather than processing a sequence step-by-step, attention lets the model directly relate any two positions in the sequence at once. Each position produces three vectors: a \emph{query} (``what am I looking for?''), a \emph{key} (``what do I offer?''), and a \emph{value} (``what information do I have?''). The output at each position is a weighted combination of all value vectors, where the blending weights come from how well each query matches each key:
+\begin{equation}
+\text{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V})
+= \text{softmax}\!\left(\frac{\mathbf{Q}\mathbf{K}^\top}{\sqrt{d_k}}\right)\mathbf{V}.
+\end{equation}
+Here $d_k$ is the key vector dimensionality; without dividing by $\sqrt{d_k}$, dot products grow large and push the softmax into a near-zero gradient region, stalling training. Because all positions are processed in parallel, transformers train faster than recurrent models and capture long-range dependencies more reliably. However, standard self-attention has $O(n^2)$ complexity in sequence length, since a similarity score is computed between all $n$ pairs. This is manageable for offline training on a desktop but it is more challenging  for inference on a microcontroller at the same design.  
+
+\subsection{Machine Learning Approaches for EMG-Based Localisation}
+EMG-based localisation is framed as a nonlinear regression problem
+\begin{equation}
+\hat{\mathbf{y}} = g(\mathbf{X}),
+\end{equation}
+where $\mathbf{X} \in \mathbb{R}^{C \times T}$ represents a windowed EMG observation of $T$ time steps across $C = 10$ channels, and $\hat{\mathbf{Y}} \in \mathbb{R}^{T \times 22}$ represents the estimated sequence of 22 joint angles per timestep. These joint angles are the direct prediction target. Five model families are evaluated in Chapter~3: TCN, BiLSTM, 1D-CNN, XGBoost, and PET (Parallel Efficient Transformer). These models were compared in terms of accuracy, training and inference cost, and deployability on the nRF52840.
+
+
+\subsubsection{Temporal Convolutional Network (TCN)}
+A \gls{tcn} learns patterns over time by applying 1D filters to the sequence. It also uses dilated convolutions, which let the model look further back and across a longer time span without greatly increasing the number of parameters. The convolutions are \emph{causal}, meaning each output time step $y_t$ depends only on input samples at or before time $t$ (never on future samples), which preserves the temporal ordering of causes and effects. For a kernel (a small set of learnable weights that slide across the input to detect patterns) $w$ and input sequence $x_t$, a dilated causal convolution can be written as
+\begin{equation}
+y_t = \sum_{k=0}^{K-1} w_k \, x_{t-dk},
+\end{equation}
+where $d$ is the dilation factor and $K$ is the kernel size. By stacking layers with exponentially increasing dilation ($d = 1, 2, 4, \ldots$), a TCN with $L$ layers achieves a receptive field (the total span of input time steps that can influence any single output) of $(K-1)(2^L - 1) + 1$ time steps. For $K=3$ and $L=8$, this is 511 time steps, enough to span several hundred milliseconds of EMG activity at typical sampling rates, which covers multiple motor unit activation cycles.
+
+Using a TCN is attractive for this project due to two main reasons. Firstly, the dilated convolutional structure is highly parallelisable. It reduces training time and allows efficient processing of training batches (a subset of the larger training set). Secondly, convolutional operators map naturally onto the instruction sets available on ARM Cortex-M processors, making TCNs strong candidates for embedded deployment on the nRF development board. Lin et al.\ \cite{lin2025parallel} have demonstrated that computationally efficient temporal models can achieve continuous kinematic estimation on NinaPro datasets with significantly reduced parameter counts. This includes the TCN family.
+
+
+
+\subsubsection{Bidirectional Long Short-Term Memory Network (BiLSTM)}
+\Gls{bilstm} networks extend recurrent modelling by processing a sequence in both forward and backward directions, concatenating the hidden states from each pass:
+\begin{equation}
+\mathbf{h}_t = \left[\overrightarrow{\mathbf{h}}_t \; \| \; \overleftarrow{\mathbf{h}}_t\right],
+\end{equation}
+where $\overrightarrow{\mathbf{h}}_t$ and $\overleftarrow{\mathbf{h}}_t$ are the forward and backward hidden states respectively. The LSTM gating mechanism (input, forget, and output gates that control what information is retained or discarded at each time step) mitigates the vanishing gradient problem (the tendency for error signals to shrink to zero as they propagate back through many time steps, preventing the network from learning long-range patterns) and enables modelling of longer-range dependencies than standard RNNs. For EMG windows, bidirectional processing is valid because inference is performed on a complete fixed-length window of 64 frames that has already been captured, with the entire backward pass available at once, unlike in streaming inference where future samples have not yet arrived. This means the interpretation of a sample can use context from both sides of the window, which is useful when, for example, a brief muscle deactivation mid-window is better understood in relation to the activation immediately following it.
+
+From an embedded perspective, however, BiLSTMs present practical challenges. Recurrent computation is inherently sequential: the hidden state $\mathbf{h}_t$ cannot be computed until $\mathbf{h}_{t-1}$ is available, eliminating the parallelism that makes CNNs efficient. Furthermore, the hidden state must be stored across time steps, increasing the activation memory requirement during inference. 
+
+\subsubsection{XGBoost}
+XGBoost is a gradient-boosted decision-tree method that combines many shallow trees to approximate a nonlinear mapping. Given a feature vector $\mathbf{z} \in \mathbb{R}^{d}$ extracted from an EMG window, the prediction is expressed as
+\begin{equation}
+\hat{y} = \sum_{m=1}^{M} f_m(\mathbf{z}), \qquad f_m \in \mathcal{F},
+\end{equation}
+where each $f_m$ is a regression tree and $\mathcal{F}$ is the space of all possible trees. XGBoost does not require an explicit temporal architecture; instead, temporal structure must be encoded in the feature vector, for example by computing MAV and RMS across the window. XGBoost is relevant because it performs strongly on well-engineered structured features and can serve as a compact benchmark against neural networks. Its principal limitations are that it depends entirely on feature engineering quality and does not naturally model the sequence-to-sequence dynamics that deep models capture.
+
+\subsubsection{Parallel Efficient Transformer (PET)}
+\label{sec:pet}
+\gls{pet} is a lightweight transformer model proposed by Lin et al.\ \cite{lin2025pet} specifically for continuous sEMG-to-kinematics estimation on edge devices. Its design targets two limitations of standard transformers: the $O(n^2)$ cost of self-attention (see Section~\ref{sec:nn_background}) and the large parameter counts that make conventional transformers impractical on microcontrollers.
+
+\paragraph{External attention.}
+PET replaces the standard per-sample key and value projections with two small shared convolutional weights $W_c$ and $W_d$ that act as an \emph{external memory}, fixed in size regardless of input length. The attention output is computed as
+\begin{equation}
+A = \text{softmax}(\text{BatchNorm}(W_c * Q)), \qquad EA = W_v \circ (W_d * A),
+\end{equation}
+where $*$ denotes convolution, $\circ$ denotes element-wise multiplication, and $Q$ is derived from the input. Because the memory matrices do not grow with the sequence, complexity drops from $O(n^2)$ to $O(n)$, given n number of time-steps are only compared to a finite set of weights. In plain terms: rather than comparing every time step with every other time step, PET compares each time step against a fixed, ``summary'' of what patterns matter. This is both faster and more parameter-efficient.
+
+\paragraph{Parallel branch structure.}
+In a standard transformer block, the attention layer and the feedforward network run one after the other (serially). PET replaces the feedforward network with a parallel convolutional module that runs \emph{alongside} the attention, and the two outputs are merged:
+\begin{equation}
+F_{\text{out}} = \alpha W_I + \beta\, EA - \gamma W_C,
+\end{equation}
+where $\alpha$, $\beta$, $\gamma$ are learnable scalars that keep the model stable early in training. The parallel structure means PET avoids the latency penalty of sequential blocks without losing the capacity to model local temporal patterns via convolution.
+
+\paragraph{Relevance to this project.}
+On the NinaPro dataset across 60 subjects, PET achieved a Pearson correlation coefficient of $0.85 \pm 0.01$ and an RMSE of $7.26 \pm 0.32$, outperforming TCN, LSTM, GRU, and standard Transformer baselines in both accuracy and inference time on an ARM Raspberry Pi device \cite{lin2025pet}. Its parameter count is smaller than any comparable transformer model. These properties make PET a strong candidate for embedded deployment as it combines regression accuracy and model speed thanks to the bespoke model architecture optimising for the original requirements for the localisation prediction task.
+
+\subsection{Embedded Implementation of Neural Networks}
+\label{sec:embedded_lit}
+The long-term goal of sEMG-based digit localisation is real-time inference on a wearable device. This creates a different set of constraints compared to offline model development. The nRF52840 development board used in Chapter~4 provides a 64~MHz ARM Cortex-M4F processor with \gls{fpu}, 256\,kB of SRAM (volatile working memory used for runtime activations and buffers), and 1\,MB of flash memory (non-volatile storage used for the firmware binary and model weights, analogous to a hard drive) \cite{nrf52840spec}. This is a very limited memory budget. For reference, a 32-bit floating-point TCN with 64 filters per layer and a depth of 8 dilated blocks may require several hundred kilobytes of weight storage alone, which already fits tightly or exceeds the available flash budget. Model size, activation memory (the ephemeral memory for the operations) per inference step, and operator complexity are the primary considerations in model implementation.
+
+\Gls{tflm} is the standard runtime for running neural networks on Cortex-M microcontrollers. It runs models inside a fixed-size byte array in SRAM called the tensor arena, which holds intermediate activations, the interpreter state, and working memory at runtime; no dynamic allocation is used. The model weights themselves can remain in flash and are accessed by pointer, so the arena size is primarily determined by activation memory rather than weight storage. The arena must be large enough to fit the biggest activation buffer produced by any single layer. For a multi-layer TCN this can easily reach tens of kilobytes, and only one sample can be processed at a time since batch inference is not possible on-device. This means model architecture choices (number of layers, filter width, operator type) directly determine whether a model fits in 256\,kB of SRAM at all, which is why parameter count is tracked as a first-class metric alongside accuracy throughout this project.
+
+%% ═══════════════════════════════════════════════════════════════
+%%  CHAPTER 3 — METHODOLOGY
+%% ═══════════════════════════════════════════════════════════════
+\section{Methodology}
+
+\subsection{Machine Learning Framework}
+
+The machine learning pipeline has four stages: data loading and segmentation, preprocessing, model training and evaluation. The purpose of this processing is to establish practically viable input and output features. A single raw EMG sample from a 10-channel measurement at a single instant contains almost no valuable information about joint angles; Muscles activate over hundreds of milliseconds and the firing pattern over time should be featured in the input shape for a reliable prediction. For the scope of this project, the models operate on a fixed-length input reading window of $W=64$ SEMG frames. This corresponds to a 1.9-second window at a 33 Hz downsampled rate from the 100 Hz original. Models predict 22 joint angles \emph{at every one of those 64 timesteps simultaneously}, producing an output of shape $(64,\,22)$ per inference.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=0.3cm,
+  box/.style={rectangle, draw, rounded corners=3pt, text centered,
+              text width=6cm, minimum height=0.7cm, font=\small, fill=gray!8},
+  arr/.style={->, >=Stealth, thick}
+]
+\node[box] (raw)   {Raw sEMG (10 channels, 100\,Hz)};
+\node[box, below=of raw]  (seg)   {Segment by movement \& repetition label};
+\node[box, below=of seg]  (ds)    {Downsample ($d_s{=}3$) \& z-score normalise};
+\node[box, below=of ds]   (win)   {Sliding window ($W{=}64$ frames, stride $S{=}16$)};
+\node[box, below=of win]  (model) {Model inference $\rightarrow$ 22 joint angles per frame};
+\node[box, below=of model](fk)    {Forward kinematics (evaluation only)};
+\node[box, below=of fk]   (kp)    {3D keypoints $\rightarrow$ MPJPE};
+\draw[arr] (raw)   -- (seg);
+\draw[arr] (seg)   -- (ds);
+\draw[arr] (ds)    -- (win);
+\draw[arr] (win)   -- (model);
+\draw[arr] (model) -- (fk);
+\draw[arr] (fk)    -- (kp);
+\end{tikzpicture}
+\caption{Overall ML pipeline from raw sEMG to MPJPE evaluation.}
+\label{fig:pipeline}
+\end{figure}
+
+Two evaluation protocols are used. \emph{Cross-subject} evaluation (trains on subjects s2-s27 and validates on another s1) tests real-world readiness in terms of how successful it is on a person it has never seen. This is the practically relevant, because electrode placement shifts between wearers which change the pattern of which muscles activate which channels. \emph{Within-subject} evaluation (train on the first 5 repetitions of every subject, and validate on their last 6th repetition) answer how good it trains on an individual, given the model has seen the subjects performance 5 times. As Chapter~6 shows, within-subject evaluation reveals which architecture is genuinely more capable, while cross-subject evaluation shows how well models handle new users.
+
+\subsection{Data Loading and Normalisation}
+
+Each NinaPro~DB1 \texttt{.mat} file provides a $T \times 10$ sEMG matrix, a $T \times 22$ CyberGlove matrix, and movement/repetition label vectors. Segments are isolated by indexing unique movement--repetition pairs. A downsampling factor of $d_s=3$ reduces the 100\,Hz recordings to ${\approx}33$\,Hz to allow for a 1.9s of context without making the tensor unnecessarily bigger. \texttt{NaN} and infinite values are replaced with zero so they have less effect on model accuracy. EMG channels are z-score normalised channel-wise (that is, each channel's training mean $\mu_c$ is subtracted and the result is divided by the training standard deviation $\sigma_c$, so every channel has zero mean and unit variance), using statistics fitted on training data only:
+\begin{equation}
+\tilde{x}_{t,c} = \frac{x_{t,c} - \mu_c}{\max(\sigma_c,\,10^{-6})}.
+\end{equation}
+
+\subsection{Preprocessing}
+%% 
+As mentioned before, each measurement is segmented into 64 frame windows. Instead of jumping forward 64 frames after each window, we only jump 16, to gain a more continuous learning of inter-window behaviour. This way, we also substantially increase the number of training examples extracted from each recording. Segments shorter than 80 frames are discarded. Cross-subject training yields 58,822 windows; within-subject training 54,686 windows with 6079 validation windows (1943 for cross-subject). 
+
+16-frame stride logic governs real-time on-device inference as well.  An on-device ring buffer (where we temporarily hold data) collects incoming EMG frames and triggers a new inference every 16 new frames, which is 16 frames / 33 Hz $\sim 0.5s $. Each inference produces a full (64,22) output; only the newest 16 predicted frames are consumed. This means the model must complete each inference in under 0.6s to keep pace with the incoming data. A model slower than this cannot run at 16-frame stride in real time and would require a larger stride. This affects the embedded latency comparison in Chapter 4. 
+
+CyberGlove raw values are linearly mapped to radians with per-sensor ROM clipping (Range of Motion clipping: the converted angle is clamped to the anatomically valid range $[\theta_{\min}, \theta_{\max}]$ for each joint, preventing physically impossible values from entering training):
+\begin{equation}
+\theta_i = \mathrm{clip}\!\left(\frac{v_i - v_{\min}}{v_{\max} - v_{\min}}\,(\theta_{\max} - \theta_{\min}) + \theta_{\min},\;\theta_{\min},\;\theta_{\max}\right).
+\end{equation}
+The 22 sensors span thumb (CMC, MCP, IP), fingers 2--5 (MCP, PIP, DIP), four MCP abduction angles, and wrist flexion/deviation. The resulting $\boldsymbol{\theta}\in\mathbb{R}^{22}$ per frame is the direct regression target; each window carries a label of shape $(W,22)$.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  overlap/.style={draw, minimum width=1.2cm, minimum height=0.55cm, fill=blue!15, font=\footnotesize},
+  new/.style={draw, minimum width=1.2cm, minimum height=0.55cm, fill=orange!50, font=\footnotesize},
+]
+\def\cs{1.25}
+% Window k
+\node[left=0.1cm, font=\footnotesize] at (0, 0)     {Window $k$\phantom{$+2$}};
+\node[left=0.1cm, font=\footnotesize] at (0, -0.8)  {Window $k{+}1$};
+\node[left=0.1cm, font=\footnotesize] at (0, -1.6)  {Window $k{+}2$};
+% Row 1
+\foreach \c in {0,1,2,3} { \node[overlap] at (\c*\cs+\cs/2, 0) {}; }
+% Row 2
+\foreach \c in {1,2,3}   { \node[overlap] at (\c*\cs+\cs/2, -0.8) {}; }
+\node[new] at (4*\cs+\cs/2, -0.8) {\tiny+16};
+% Row 3
+\foreach \c in {2,3,4}   { \node[overlap] at (\c*\cs+\cs/2, -1.6) {}; }
+\node[new] at (5*\cs+\cs/2, -1.6) {\tiny+16};
+% Annotations
+\draw[<->, thick] (0, 0.42) -- (4*\cs, 0.42) node[midway, above, font=\footnotesize] {64 frames (${\approx}1.9$\,s)};
+\draw[<->, thick] (4*\cs, -0.38) -- (5*\cs, -0.38) node[midway, above, font=\footnotesize] {16 frames};
+\end{tikzpicture}
+\caption{Stride-16 sliding window: 64-frame input advances by 16 frames; only the newest 16 predicted angles are consumed per step.}
+\label{fig:stride}
+\end{figure}
+
+MPJPE is computed post-hoc by applying a planar FK model to the predicted angles; training uses \texttt{SmoothL1Loss} on angles directly. All MPJPE values are in normalised FK coordinates rather than physical units, so cross-paper comparisons require rescaling. The wrist always reports near-zero MPJPE because it is the kinematic chain's fixed root — a geometric artefact, not a prediction result; per-joint discussion focuses on finger joints only.
+
+\subsection{Model Training and Validation}
+
+All models are trained with the AdamW optimiser, which extends the standard Adam update rule with weight decay to discourage large parameter values and reduce overfitting. The learning rate starts high to explore the loss landscape (which is multi-variate, and highly random), and slows down towards zero so the optimiser can settle into a good minimum loss around the final few epochs. Gradient clipping is applied at norm~1.0: if the combined gradient across all parameters grows too large in a single step, it is scaled down proportionally before the update, preventing the instability that can arise when a difficult batch produces unusually large gradients. All models use batch size~128 and share the same training objective: \texttt{SmoothL1Loss} (Huber loss), applied directly to the predicted 22-dimensional angle sequence in radians against the CyberGlove ground-truth. Huber loss behaves like mean-squared error for small residuals and like mean-absolute error for large ones, making it more robust to occasional large angle prediction errors than a pure MSE objective. Table~\ref{tab:arch} summarises per-model architecture and training configuration.
+
+\begin{table}[H]
+\centering
+\caption{Model architectures and training hyperparameters ($\eta_0$: initial LR; WD: weight decay; DO: dropout; $h$: hidden units; $d$: model dim; $s$: external memory size; Patch($P$): frames per token).}
+\label{tab:arch}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrllll}
+\toprule
+\textbf{Model} & \textbf{Architecture} & \textbf{Params} & $\boldsymbol{\eta_0}$ & \textbf{WD} & \textbf{DO} & \textbf{Ep.} \\
+\midrule
+TCN         & 5 dilated residual blocks, $h{=}128$, RF$=63$              & 451,734 & $3{\times}10^{-4}$ & $5{\times}10^{-3}$ & 0.1 & 10 \\
+BiLSTM      & 2-layer BiLSTM, $h{=}128$                                  & 544,790 & $10^{-3}$          & $5{\times}10^{-4}$ & 0.2 & 20 \\
+CNN-BiLSTM  & 3$\times$Conv1d($k{=}3$, 64\,ch) + 2-layer BiLSTM          & 615,958 & $10^{-3}$          & $5{\times}10^{-4}$ & 0.2 & 20 \\
+Transformer & Patch($P{=}8$) + 4$\times$TEncLayer, $d{=}128$, 4\,heads   & 543,126 & $10^{-3}$          & $5{\times}10^{-4}$ & 0.2 & 20 \\
+PET         & Patch($P{=}8$) + 3 branches$\times$2\,layers, $s{=}64$     & 756,246 & $10^{-3}$          & $5{\times}10^{-4}$ & 0.2 & 20 \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+PET and the Transformer divide the 64-frame window into 8 non-overlapping patches and average the frames within each patch before processing. This makes the model faster. This has the unintended effect of blurring transient muscle activation event shorter than roughly 240\,ms  as it's averaged out before the model ever sees it. BiLSTM and CNN-BiLSTM avoids this by processing every single frame in sequence, so they retain fine-grained details.
+
+
+Each model's best checkpoint is selected on validation MPJPE, computed via forward kinematics at the end of every epoch. TCN's training was terminated early because its validation loss had plateaued — further epochs produced no meaningful improvement. The implications for model comparison are discussed in Chapter~\ref{ch:results}.
+
+\subsection{Fitting Models to the Embedded Target}
+\label{sec:quant}
+
+A model trained on a desktop GPU is not automatically deployable on the nRF52840 (256\,kB SRAM, 1\,MB flash). A float32 model with 500\,K parameters occupies 2\,MB of flash before firmware overhead — already exceeding the budget. Two strategies were applied: architectural downsizing and INT8 post-training quantisation (PTQ).
+
+\paragraph{Architectural downsizing.}
+BiLSTM and PET exceeded flash capacity in their full-size form. Smaller variants were defined and trained from scratch (Table~\ref{tab:small}). TCN fit within budget after quantisation alone.
+
+\begin{table}[H]
+\centering
+\caption{Full vs.\ small model variants for embedded deployment.}
+\label{tab:small}
+\begin{tabular}{lll}
+\toprule
+\textbf{Model} & \textbf{Full architecture} & \textbf{Small variant} \\
+\midrule
+BiLSTM  & 2-layer, $h{=}128$ & 1-layer, $h{=}64$ \\
+PET     & 3 branches, GELU   & 1 branch, ReLU \\
+TCN     & 5 blocks, $h{=}128$ & unchanged \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Quantisation.}
+INT8 uniform affine quantisation maps each float32 weight $x$ to an integer $q$ via:
+\begin{equation}
+x \approx s(q-z), \qquad q = \mathrm{round}\!\left(\frac{x}{s}\right) + z,
+\end{equation}
+where $s$ is the scale factor and $z$ the zero-point, fitted to the observed tensor range. This quadruples the effective flash capacity relative to float32 and enables CMSIS-NN integer kernels on the Cortex-M4F \cite{tf_ptq,litert_int8_spec}. All three deployed models used PTQ with 500 calibration EMG windows; no retraining was needed.
+
+\paragraph{Conversion pipeline.}
+PyTorch stores input data with channels on the outer axis: a window is shaped \texttt{(B,C,T)} — batch, then 10 EMG channels, then 64 time steps. The on-device ring buffer accumulates frames one at a time as they arrive from the ADC, so it naturally produces data in the opposite order: time steps first, channels second \texttt{(B,T,C)}. A \texttt{FirmwareWrapper} is added around each model before export; it swaps these two axes so the firmware can pass data straight from the ring buffer into the model without any reshaping on the microcontroller. Table~\ref{tab:tools} lists the tools used in the conversion pipeline.
+
+\begin{table}[H]
+\centering
+\caption{Software tools used in the model conversion and deployment pipeline.}
+\label{tab:tools}
+\small
+\begin{tabular}{p{2.8cm}p{2.5cm}p{8cm}}
+\toprule
+\textbf{Tool} & \textbf{Stage} & \textbf{What it does} \\
+\midrule
+PyTorch & Training & \texttt{.pt} weights $\to$ float32 checkpoint \\
+TorchScript / ONNX & Conversion & \texttt{.pt} checkpoint $\to$ static \texttt{.onnx} graph (BiLSTM-small only) \\
+\texttt{onnx2tf} & Conversion & \texttt{.onnx} graph $\to$ TensorFlow SavedModel (BiLSTM-small only) \\
+Keras (TF) & Conversion & Reconstructs graph by hand from \texttt{.pt} weights $\to$ TF SavedModel (TCN, PET-small) \\
+TFLite Converter & Quantisation & SavedModel + 500 calibration windows $\to$ INT8 \texttt{.tflite} flatbuffer \\
+\texttt{xxd -i} & Packaging & \texttt{.tflite} file $\to$ \texttt{.cc} source with model as a C byte array \\
+TFLM & Runtime & C byte array $\to$ inference in a static SRAM tensor arena \\
+CMSIS-NN & Runtime & INT8 layer ops $\to$ ARM Cortex-M4F optimised kernels (called by TFLM) \\
+Zephyr / \texttt{west} & Build \& Flash & Source files $\to$ firmware binary flashed to nRF52840 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+BiLSTM-small followed the PyTorch $\to$ ONNX $\to$ \texttt{onnx2tf} $\to$ TFLite route. For TCN and PET-small, \texttt{onnx2tf} misidentified Conv1D dimensions, so an equivalent Keras graph was constructed by hand with weights loaded tensor-by-tensor. The \texttt{.tflite} file is embedded in firmware via \texttt{xxd -i model.tflite > src/model\_data.cc} and placed in flash by the linker. The TFLM tensor arena (sized by bisection: 128/160/192\,kB for BiLSTM-small/TCN/PET-small) provides scratch memory for activations during inference.
+
+\paragraph{Compatibility issues.}
+Deploying PET-small exposed several TFLM-incompatible operators, resolved as shown in Table~\ref{tab:compat}.
+
+\begin{table}[H]
+\centering
+\caption{TFLM compatibility issues encountered during PET-small deployment.}
+\label{tab:compat}
+\begin{tabular}{p{4cm}p{7.5cm}}
+\toprule
+\textbf{Issue} & \textbf{Fix} \\
+\midrule
+Dynamic \texttt{SHAPE} op from \texttt{tf.shape(x)} & Replaced with static \texttt{int(x.shape[1])} \\
+Redundant \texttt{DIV} after softmax & Eliminated (softmax already normalises) \\
+GELU absent from TFLM kernels & Replaced with ReLU; model retrained from scratch \\
+\texttt{LayerNorm} introduces runtime \texttt{SHAPE} & Added \texttt{resolver.AddShape()} in firmware \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Visualisation Methods}
+
+The full source code, including all model definitions, training scripts, quantisation tools, and embedded firmware, is available in Appendix~\ref{app:code}. Standard diagnostic plots are produced after each training run: loss and angle-MAE curves per epoch for both training and validation splits; a per-joint and per-finger MPJPE bar chart on the validation set; a histogram and cumulative distribution of per-window errors; predicted versus ground-truth angle-trajectory overlays for three randomly sampled validation windows; and a gradient-norm trace across training steps. A data-ablation study trains each model on five subsets (10--100\%) of the training data for five epochs and plots validation MPJPE against training-set size, revealing data-efficiency differences between architectures.
+
+%% ═══════════════════════════════════════════════════════════════
+%%  CHAPTER 4 — EMBEDDED IMPLEMENTATION
+%% ═══════════════════════════════════════════════════════════════
+\section{Embedded Implementation}
+\label{sec:embedded}
+
+\subsection{Embedded System Setup}
+
+The implementation platform is the Nordic Semiconductor nRF52840 Development Kit. It contains a 64~MHz ARM Cortex-M4F processor with a single-precision floating-point unit (FPU), 256\,kB of SRAM, and 1\,MB of flash memory, which stores both the firmware and the model weights. The board runs Zephyr RTOS, a real-time operating system for embedded devices. Zephyr provides a consistent software layer for accessing peripherals such as GPIO, UART, and the J-Link RTT logging interface. It also manages how memory is divided between program execution and dynamic allocation (asking for memory in heap) in a predictable way. Two Zephyr configuration parameters are especially important for memory budgeting: \texttt{CONFIG\_MAIN\_STACK\_SIZE=8192}, which reserves 8\,kB for the main thread stack used for the main flow of the program, and \texttt{CONFIG\_HEAP\_MEM\_POOL\_SIZE=48128}, which reserves 47\,kB for heap memory. The remaining SRAM is available for the static tensor arena occasionally utilised by TFLM.
+
+\subsection{TinyML Implementation and Processing}
+
+\Gls{tflm} performs no dynamic allocation: all tensors, scratch buffers, and the interpreter reside in a static byte array — the tensor arena (\texttt{s\_arena}, 172\,kB), sized for the most demanding model (BiLSTM-small, 168\,kB). Each operator must be registered in a \texttt{MicroMutableOpResolver} before \texttt{AllocateTensors()}; 52 operators are registered here. Where available, CMSIS-NN kernels are linked automatically, exploiting Cortex-M4 SIMD instructions for fully-connected and convolutional operations. Table~\ref{tab:ops} (Appendix) summarises operator coverage per model.
+
+\subsection{Quantised Inference Deployment}
+\label{sec:fw_deployment}
+
+The \texttt{model\_runner} module wraps TFLM in a thin C interface: \texttt{init()} loads the model from flash; \texttt{infer(window, out)} runs one 64-frame inference; \texttt{arena\_used()} reports peak SRAM. The active model is selected at compile time via \texttt{-DMODEL=\textit{name}}. In normal operation a ring buffer triggers inference every 16 new EMG frames and logs the predicted angles over RTT.
+
+\subsection{Benchmark Protocol}
+\label{sec:bench_method}
+
+The test set is 100 windows from subject~1 Exercise~1 (individual finger movements), sent from a host PC over UART. Latency is timed on-chip using the ARM DWT hardware cycle counter — reset just before inference, read immediately after, then divided by 64~MHz to get microseconds. All UART I/O is outside the timed region, so the measurement reflects pure computation. The metrics collected are defined in Table~\ref{tab:metrics}.
+
+\begin{table}[H]
+\centering
+\caption{Metrics recorded for each deployed model.}
+\label{tab:metrics}
+\renewcommand{\arraystretch}{0.85}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lll}
+\toprule
+\textbf{Metric} & \textbf{Formula} & \textbf{Note} \\
+\midrule
+Latency ($\mu$s)        & DWT cycles / 64\,MHz                          & Mean, std, min, max over 100 windows \\
+Throughput (inf/s)      & $10^6 / \overline{t}$                         & Peak back-to-back rate \\
+Energy ($\mu$J)         & $\overline{t} \times 3.3\,\text{V} \times 5.3\,\text{mA}$ & Estimated from assumed active current at 64\,MHz \\
+Angle MAE (\textdegree) & mean $|{\hat\theta - \theta}|$                & Over all windows, timesteps, and 22 joints \\
+Tensor arena (kB)       & \texttt{arena\_used()}                        & Peak SRAM during inference \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\subsection{Embedded Performance Evaluation}
+
+The full-size models (BiLSTM at 860\,kB arena, PET at 898\,kB flash) could not be deployed to the nRF52840. Three architecturally downsized variants were benchmarked: the TCN (unchanged from training, as it already fits), BiLSTM-small and PET-small. PET-small required retraining because loading weights from the 3-branch GELU model into the 1-branch ReLU Keras graph yielded 170\textdegree{} MAE, a consequence of mismatched activation statistics. After retraining with the exact deployment architecture, PET-small achieved 30.23\textdegree{} on-board MAE, confirming that the training and deployment graphs were consistent. Angle RMSE for all small variants is in Table~\ref{tab:small_rmse} (Appendix).
+
+%% ═══════════════════════════════════════════════════════════════
+%%  CHAPTER 5 — PROOF-OF-CONCEPT HARDWARE DESIGN
+%% ═══════════════════════════════════════════════════════════════
+\section{Proof-of-Concept Hardware Design}
+\label{sec:hw_exp}
+
+The work in this chapter is a proof-of-concept analogue front-end for sEMG acquisition. All model training and evaluation in the rest of the project uses NinaPro~DB1, so no live data was collected with this board. The goal was to show that a complete ten-channel sEMG signal chain can be built at wrist-worn scale, and to have a real piece of hardware ready for future closed-loop experiments.
+
+\textbf{Design.} The schematic and PCB layout were produced in KiCad. The core component is the TI ADS1298, a purpose-built 8-channel biopotential AFE chip that handles most of the analogue signal chain in a single package \cite{ads1298datasheet}. Rather than building a discrete amplifier chain with separate instrumentation amplifiers, filters, and ADCs for each electrode pair, the ADS1298 integrates all of this: each of its eight channels has a differential programmable-gain amplifier (set to gain~6, giving a full-scale range of ${\pm}0.42$\,mV at the input), a first-order sinc anti-aliasing filter, and a 24-bit sigma-delta ADC \cite{ads1298datasheet}. It also has a built-in Right Leg Drive (RLD) amplifier, which senses the common-mode interference on the body (predominantly 50\,Hz mains pickup) and actively cancels it by driving a reference electrode — eliminating the need for a separate passive CMRR filter network \cite{ads1298datasheet,ti_e2e_ads1298}. Two additional differential connections are routed from a secondary channel header to bring the total to ten, matching the NinaPro~DB1 electrode count.
+
+The ADS1298 communicates with the nRF52840 over SPI at up to 20\,MHz. When a conversion is complete, the chip asserts a DRDY interrupt pin, triggering the microcontroller to read a 27-byte frame (3 bytes of status followed by 3 bytes per channel, $8\times3=24$ bytes of channel data) — a transfer rate of 216\,kbits/s at 1\,kSPS \cite{ads1298datasheet}. Using a hardware interrupt rather than polling means the CPU is idle between samples, which matters for a battery-powered device.
+
+\textbf{Fabrication and assembly.} The PCB is a four-layer stackup (signal / ground / power / signal). The analogue and digital ground planes are connected at a single point directly beneath the ADS1298 to prevent switching noise from the digital circuitry coupling into the sensitive analogue inputs. Decoupling capacitors (100\,nF, X5R ceramic) are placed within 0.5\,mm of every supply pin. Components were ordered from Digikey and the bare boards were manufactured by Eurocircuits. Assembly was carried out in the A209 lab. The assembled board is ready for bring-up testing, which is left for future work.
+
+\textbf{Firmware integration.} The ADS1298 connects to the nRF52840 DK over a six-wire cable (SCLK, MOSI, MISO, CS, DRDY, GND). A Zephyr devicetree overlay registers the SPI peripheral and DRDY interrupt; a Zephyr driver initialises the chip on boot and attaches an interrupt handler that copies each incoming 27-byte frame into a ring buffer. A low-priority thread then unpacks the ten channel values into the circular EMG buffer and triggers inference at stride-16, using the same logic as the benchmark firmware described in Chapter~4. End-to-end validation with a live subject is deferred to future work.
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.32\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{figures/schematic.png}\\[2pt]
+  {\small (a) Circuit schematic (TI ADS1298).}
+\end{minipage}\hfill
+\begin{minipage}{0.32\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{figures/layout.png}\\[2pt]
+  {\small (b) Four-layer PCB layout.}
+\end{minipage}\hfill
+\begin{minipage}{0.32\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{figures/IMG_1472.jpeg}\\[2pt]
+  {\small (c) Fabricated and assembled board.}
+\end{minipage}
+\caption{Custom sEMG analogue front-end: schematic, layout, and fabricated PCB.}
+\label{fig:hw_overview}
+\end{figure}
+
+%% ═══════════════════════════════════════════════════════════════
+%%  CHAPTER 6 — RESULTS
+%% ═══════════════════════════════════════════════════════════════
+\section{Results}
+\label{sec:results}
+
+The results can be corroborated into three main questions surrounding the goals of this research. How accurately can the trained models predict 22-dimensional hand kinematics from forearm sEMG, and how does it compare to literature. Second, what are the points of failure of the predictions? Finally, how good can the models run on the embedded hardware target?
+
+%% ── Question 1 ───────────────────────────────────────────────
+\subsection{Accuracy In Hand Kinematics Decoding?}
+
+\subsubsection{Model Comparison}
+
+Table~\ref{tab:mpjpe} mentions best validation \gls{mpjpe} and  angle \gls{rms} error under both evaluation protocols. CNN-BiLSTM achieves the lowest within-subject MPJPE with 0.2591, followed by BiLSTM (0.2661) and Transformer (0.2753). An interesting observation can be made about the evaluation-protocol effect: all models improve 18--24\% when switching from cross-subject to within-subject evaluation, meaning all models have a hard time predicting on an unseen subject. This directs to the effect of inter-subject electrode placement variation on prediction quality. Which is a considerable performance bottleneck. At the FK scale from Section~\ref{sec:fk}, MPJPE~0.26 corresponds to roughly 40\% of one proximal phalanx ($\approx$16\,mm).
+
+\begin{table}[H]
+\centering
+\caption{Best validation MPJPE and angle RMSE per model. $^\dagger$TCN stopped early at plateau. NRMSE$^*$ = mean(RMSE$_j$/ROM$_j$) over 22 sensors \cite{lin2025parallel}.}
+\label{tab:mpjpe}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrrr}
+\hline
+\textbf{Model} & \textbf{Params} & \textbf{Cross-subj MPJPE} & \textbf{Within-subj MPJPE} & \textbf{RMSE (\textdegree)} & \textbf{NRMSE$^*$} \\
+\hline
+CNN-BiLSTM      & 615,958 & 0.3398          & \textbf{0.2591} & 25.67 & 0.3721 \\
+BiLSTM          & 544,790 & 0.3494          & 0.2661          & 28.24 & 0.4043 \\
+Transformer     & 543,126 & 0.3411          & 0.2753          & \textbf{23.03} & \textbf{0.3338} \\
+TCN$^\dagger$   & 451,734 & ---             & 0.3284          & 23.89 & 0.3461 \\
+PET             & 756,246 & 0.3929          & 0.3188          & 23.38 & 0.3390 \\
+\hline
+\end{tabular}}
+\end{table}
+
+\subsubsection{Comparison on Model Accuracy Metrics}
+\label{sec:rmse_divergence}
+
+We see that MPJPE and RMSE ranking are different from each other. The divergence is caused by what the metrics reward. MPJPE places greater emphasis on angle errors that produce larger positional changes along the finger through the forward kinematic chain. RMSE, gives equal weight to all 22 sensors regardless of biomechanical effects. As a result, models that better capture errors in joints closer to the wrist are favoured by MPJPE, whereas models that reduce average error across all sensors perform better with RMSE. This explains why the CNN-BiLSTM ranks first in MPJPE but only fourth in RMSE, since its frame-level processing captures the fast and short MCP transients that which provides higher spatial accuracy. On the other hand, the Transformer achieves the lowest RMSE (23.03°) despite ranking third in MPJPE (0.2753), because its patch-level smoothing attenuates those MCP transients but yields lower average error on the abduction and wrist sensors, which are harder to predict yet have low spatial effect on other joints. Both measures are relevant in different ways: MPJPE should be preferred for applications where 3D joint position determines task success (prosthetics, HCI), while RMSE is more appropriate when angle accuracy itself is the objective.
+
+
+\subsubsection{Literature Benchmark}
+\label{sec:lit_comparison}
+
+For comparison, Lin et al.\ \cite{lin2025parallel} report NRMSE~=~0.1145--0.1390 on NinaPro~DB2, whereas the models in this project achieve 0.33--0.40, around 2.5--3$\times$ higher. This gap reflects differences in task difficulty rather than model quality. Lin et al.\ predict only 10 \gls{dof} (MCP and PIP joints), while this project predicts all 22 CyberGlove sensors, including the difficult DIP joints. The datasets also differ in a way that affects modelling difficulty: Lin et al.\ use NinaPro~DB2 with RMS-smoothed EMG from only eight grasp types, which produces cleaner and more repetitive input patterns, whereas this project uses NinaPro~DB1 with raw EMG data across 52 movements, creating a much broader and less regular prediction landscape. Differences in electrode hardware and acquisition setup between DB1 and DB2 likely widen the gap further. If DIP sensors were excluded from our evaluation, the resulting NRMSE would likely move substantially closer to the range reported by Lin et al. A further difference in methodology is that Lin et al.\ train with Soft-DTW, reward matching overall shape of motion sequence, whereas all models here use time-step-wise \texttt{SmoothL1Loss}.
+
+\subsubsection{Training Evidence: How Models Got There}
+
+The accuracy results show in distinct training dynamics. CNN-BiLSTM reaches near-equal train and validation loss (${\approx}0.073$) by epoch~15, its convolutional front-end generalising reliably. PET's curves are smooth and nearly coincident throughout 20 epochs (Figure~\ref{fig:training_curves}), showing no over-fitting. The Transformer shows a persistent train/validation gap at epoch~20, consistent with attention-based models requiring more data to saturate.
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{cnnlstm_plots/training_curves.png}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{pet_plots/training_curves.png}
+\end{minipage}
+\caption{Training and validation loss curves for CNN-BiLSTM (left) and PET (right); both converge without overfitting.}
+\label{fig:training_curves}
+\end{figure}
+
+Gradients reveal an important difference. Both BiLSTM and PET show a single initialisation spike (${\approx}1.8$) followed by rapid stabilisation below 0.1 within 500 batches. TCN, by contrast, shows persistent spikes of 0.4--0.5 throughout its training run (Figure~\ref{fig:grad_norms}). This can happen because each dilated layer looks over a wider time span than the last, so during training the error signal can be repeatedly enlarged as it passes back through several layers. This instability does not prevent convergence but limits how deep dilated stacks can go without gradient clipping. 
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{bilstm_plots/grad_norm.png}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{tcn_plots/grad_norm.png}
+\end{minipage}
+\caption{Gradient norms for BiLSTM (left, stable) and TCN (right, persistent spikes from dilated stacking); PET and CNN-BiLSTM in Appendix~\ref{app:gradnorm}.}
+\label{fig:grad_norms}
+\end{figure}
+
+Data-efficiency ablations (Table~\ref{tab:ablation}) give a clearer understanding of how each model learns as more training data is added. TCN gives the best 10\%-data MPJPE (0.3953) because its 63-frame receptive field lets it look across a wider time-duration, helping it pick up stable movement patterns even from few examples. CNN-BiLSTM improves the most as data increases (15.5\% gain from 10\% to 100\%), showing that it benefits strongly from seeing a wider variety of movements; it needs more data, but also gains the most from it. By contrast, BiLSTM changes little beyond 75\%, suggesting that it has already learned most of what extra data can offer.
+
+\begin{table}[H]
+\centering
+\caption{Data ablation: validation MPJPE vs.\ training-set fraction (within-subject, 5 epochs). Small-model variants in Appendix~\ref{app:ablation}.}
+\label{tab:ablation}
+\begin{tabular}{lrrrrr}
+\hline
+\textbf{Model} & \textbf{10\%} & \textbf{25\%} & \textbf{50\%} & \textbf{75\%} & \textbf{100\%} \\
+\hline
+BiLSTM          & 0.4034 & 0.3881 & 0.3719 & 0.3552 & 0.3482 \\
+CNN-BiLSTM      & 0.4019 & 0.3833 & 0.3663 & 0.3554 & \textbf{0.3393} \\
+Transformer     & 0.4053 & 0.3954 & 0.3781 & 0.3694 & 0.3579 \\
+PET             & 0.4054 & 0.3953 & 0.3782 & 0.3685 & 0.3603 \\
+TCN             & \textbf{0.3953} & 0.3818 & 0.3674 & 0.3575 & 0.3502 \\
+\hline
+\end{tabular}
+\end{table}
+
+%% ── Question 2 ───────────────────────────────────────────────
+\subsection{Where and Why Do Predictions Fail?}
+\label{sec:results_errors}
+
+\subsubsection{Kinematic Chain Error Amplification}
+\label{sec:kinematic_error}
+
+A common finding is that prediction error increases steadily from proximal(MCP) to distal joints(PIP). Figure~\ref{fig:heatmap} shows per-joint MPJPE for CNN-BiLSTM and BiLSTM: every model achieves near-zero error at the \gls{mcp} base (geometrically fixed by the FK palm anchor) but error grows at \gls{pip}, \gls{dip}, and fingertip level. For CNN-BiLSTM, Ring \gls{pip} error is 0.279, rising to 0.438 at \gls{dip} and 0.561 at the Ring fingertip. This is not a model failure but a geometric consequence of the kinematic chain: a small angular error at MCP rotates the entire distal segment, and errors compound at PIP and DIP. Since training uses angle regression loss rather than a Cartesian fingertip loss, the FK pipeline amplifies angular errors towards the distal joints.
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{cnnlstm_plots/joint_error_heatmap.png}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{bilstm_plots/joint_error_heatmap.png}
+\end{minipage}
+\caption{Per-joint MPJPE for CNN-BiLSTM (left) and BiLSTM (right); errors amplify distally along the kinematic chain (remaining models in Appendix~\ref{app:heatmaps}).}
+\label{fig:heatmap}
+\end{figure}
+
+\subsubsection{Per-Finger Error and Muscle Anatomy}
+
+The ring finger consistently produces the highest \gls{mpjpe} across all architectures (${\approx}0.35$ for PET, ${\approx}0.32$ for CNN-BiLSTM). This is anatomically determined: the ring finger shares interosseous muscle tendons with the middle and little fingers, so its sEMG trace is coupled with adjacent muscle activity. By contrast, the little finger benefits from a dedicated abductor digiti minimi and the thumb from opponens pollicis which are much more prominent at the forearm producing relatively isolated EMG signatures that all models exploit well. Figure~\ref{fig:per_finger} confirms the Ring $>$ Middle $>$ Index $>$ Thumb $\approx$ Little ordering; full fingertip MPJPE for all models is in Table~\ref{tab:tip_mpjpe} (Appendix).
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{pet_plots/per_finger_mpjpe.png}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{cnnlstm_plots/per_finger_mpjpe.png}
+\end{minipage}
+\caption{Per-finger MPJPE for PET (left) and CNN-BiLSTM (right); Ring finger is consistently the hardest to predict across all architectures.}
+\label{fig:per_finger}
+\end{figure}
+
+\subsubsection{Error Distribution and Tail Behaviour}
+
+Figure~\ref{fig:errdist} shows the prediction error distribution for CNN-BiLSTM. Performance is strong on average — 95\% of windows fall below MPJPE~0.44 — but the worst 10\% produce errors 50\% above the median, concentrated at gesture transitions. This is the most dangerous moment for a prosthetic hand: a wrong prediction mid-grip-change can cause a drop. For a research prototype this rate is acceptable, but it would need to be mitigated before clinical deployment. Error distributions for all models are provided in Appendix~\ref{app:errdist}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\linewidth]{cnnlstm_plots/error_distribution.png}
+\caption{Per-window MPJPE distribution for CNN-BiLSTM (median 0.2525); tail errors concentrate at gesture transitions.}
+\label{fig:errdist}
+\end{figure}
+
+\subsubsection{Angle Trajectory Quality}
+
+Figure~\ref{fig:angle_overlays} shows how closely the predicted joint angles follow the ground truth for PET. All models share the same core failure: they react too slowly to sudden angle changes, lagging behind by 5--15 frames. The reason is that the training loss(\texttt{SmoothL1Loss}) rewards minimising average error, which pushes predictions toward a safe middle value rather than tracking sharp peaks. The model predicts more conservatively rather than committing to an extreme angle. The practical consequence is that predicted angles only reach 60--80\% of their true peak, so a prosthetic hand controlled by these models would never fully close or open. CNN-BiLSTM is the least affected because its convolutional front-end picks up the rate of change of the EMG signal, giving the recurrent stage an early warning of upcoming transitions. PET is the most affected: it groups 8 frames together before processing, so any transition shorter than ${\approx}$240\,ms is averaged away and the model never sees it. Angle overlays for BiLSTM and TCN are in Appendix~\ref{app:overlays}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\linewidth]{pet_plots/angle_overlays.png}
+\caption{Predicted vs.\ ground-truth joint angles for PET; trajectory shape is captured but peak amplitudes are underestimated.}
+\label{fig:angle_overlays}
+\end{figure}
+
+%% ── Question 3 ───────────────────────────────────────────────
+\subsection{Embedded Deployment: Does It Run in Real Time?}
+\label{sec:results_embedded}
+
+\subsubsection{Deployed Model Variants}
+\label{sec:model_improvement}
+
+Three models were compiled and flashed to the nRF52840: TCN (unchanged), BiLSTM-small, and PET-small. Full-size models were not deployable: the full BiLSTM required an ${\approx}860$\,kB tensor arena, and the full PET's 898\,kB TFLite file overflowed flash by 135\,kB. The downsized variants fit: BiLSTM-small at ${\approx}168$\,kB arena; PET-small at ${\approx}63$\,kB arena.
+
+\subsubsection{Embedded Performance}
+
+Table~\ref{tab:embedded} presents the on-board benchmark results. BiLSTM-small is the fastest and most energy-efficient model at 37.5~inf/s and 466\,$\mu$J/inference. TCN is counter-intuitively the slowest at 940\,ms per inference, despite being convolution-based: TFLite Micro must physically reorder tensor data before and after every dilated convolution, and this bookkeeping cost accumulates across all five dilated blocks, dwarfing the arithmetic. PET-small falls between the two because its attention operations lack integer-accelerated kernel support and must instead run in slower general-purpose floating-point code.
+
+\begin{table}[H]
+\centering
+\caption{On-device benchmark results on the nRF52840 DK (100 windows, NinaPro~DB1 S1). Throughput = $10^6/\overline{t}$; Energy = $\overline{t} \times 3.3\,\text{V} \times 5.3\,\text{mA}$.}
+\label{tab:embedded}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrrr}
+\hline
+\textbf{Model} & \textbf{Arena (kB)} & \textbf{Mean lat.\ ($\mu$s)} & \textbf{Std ($\mu$s)} & \textbf{Throughput (inf/s)} & \textbf{Energy ($\mu$J)} & \textbf{MAE (\textdegree)} \\
+\hline
+TCN          & 69.0  & 940{,}102 & 1{,}009 & 1.1  & 16{,}442 & 27.80 \\
+BiLSTM-small & 167.9 &  26{,}640 &      68 & 37.5 &      466 & 32.24 \\
+PET-small    &  62.6 & 293{,}424 &     815 &  3.4 &  5{,}132 & 30.23 \\
+\hline
+\end{tabular}}
+\end{table}
+
+All three models execute deterministically where latency standard deviation stays below 0.3\% of mean, as expected on a microcontroller with no cache or OS scheduling jitter. In real deployment, a stride-16 sliding window produces one new input every $16/33\approx485$\,ms, setting the hard real-time deadline. BiLSTM-small at 26.6\,ms uses only 5\% of this window, leaving the remaining 95\% free for BLE transmission, sensor management, or power gating. PET-small at 293\,ms fits the deadline with a comfortable 1.7$\times$ margin. TCN at 940\,ms \emph{misses} the deadline entirely, forcing 32-step stride, (${\approx}$1\,Hz output rate) which is too slow for responsive prosthetic or HCI control.
+
+%% ═══════════════════════════════════════════════════════════════
+%%  CHAPTER 7 — DISCUSSION & ANALYSIS
+%% ═══════════════════════════════════════════════════════════════
+\section{Discussion and Analysis}
+\label{sec:discussion}
+
+This chapter interprets the results against the four project objectives: benchmarking regression models on NinaPro~DB1; deploying on the nRF52840; designing a custom sEMG analogue front-end; and formally comparing architectures with actionable recommendations.
+
+\subsection{Achievable Accuracy from Surface EMG Alone}
+\label{sec:disc_feasibility}
+
+CNN-BiLSTM's within-subject MPJPE of 0.2591, corresponding to roughly 16\,mm of average joint position error, is clinically relevant for gross grip tasks (power grip, tripod pinch, hook grasp) that require only coarse finger-group coordination. It remains too coarse for fine dexterous tasks such as single-key typing without additional closed-loop correction.
+
+The best NRMSE of 0.3338 is 2.5--3$\times$ above Lin et al.'s 0.1145--0.1390 \cite{lin2025parallel}, but their task is substantially simpler: 10~\gls{dof}, 8 movement types, and a homogeneous database. The primary driver of the remaining gap is task breadth, as 52 movements better represents realistic prosthetic use. A further contribution is their use of Soft-DTW loss, which explicitly rewards temporal trajectory alignment rather than pointwise error.
+
+\subsection{Subject Calibration as the Primary Performance Bottleneck}
+\label{sec:disc_calibration}
+
+The 18--24\% improvement from within-subject evaluation is the single most consequential finding of this project, consistent across all five architectures. The cause is anatomical: muscle belly depth, subcutaneous fat thickness, and forearm circumference vary between individuals, so the channel-to-angle mapping learned from population data degrades whenever electrode geometry shifts. This includes minor inter-session placement drift that a single user experiences between wearings.
+
+A short calibration session recording even one repetition of each movement from a new user is therefore expected to deliver a larger accuracy gain than any architectural upgrade evaluated here. Future work on rapid personalisation, such as meta-learning, few-shot adaptation, or fine-tuning from a cross-subject initialisation, would directly attack the bottleneck that matters most.
+
+\subsection{Architecture Recommendations}
+\label{sec:disc_architecture}
+
+The within-subject ordering (CNN-BiLSTM $>$ BiLSTM $>$ Transformer $\approx$ PET $>$ TCN) reflects how well each architecture's inductive biases match the temporal statistics of sEMG. Recurrent models process all 64 input frames individually, preserving motor-unit transients at the 30\,ms timescale. PET and the Transformer group frames into ${\approx}$240\,ms tokens before applying attention, averaging away sub-patch transients and producing smoother but less precise trajectories (visible in Figure~\ref{fig:angle_overlays}). CNN-BiLSTM's convolutional front-end additionally captures spatial and temporal EMG gradients, encoding the rate of signal change rather than only instantaneous amplitude, which improves dynamic range in angle predictions without increasing recurrent parameter count.
+
+Crucially, cross-subject (uncalibrated) performance is nearly indistinguishable across architectures. \textbf{Recommendation:} calibrated within-subject deployments should use CNN-BiLSTM or BiLSTM; uncalibrated deployments can select on latency or interpretability grounds instead.
+
+\subsection{Error Modes and Deployment Implications}
+\label{sec:disc_failures}
+
+Four structural failure modes each carry a concrete implication for real-world deployment. \textbf{Loss-metric misalignment:} \texttt{SmoothL1Loss} weights all 22 joint angles equally, yet proximal (MCP) errors rotate entire distal segments and therefore dominate MPJPE. An FK-aware or fingertip-weighted Cartesian loss would correct this incentive without any architectural change. \textbf{Ring finger irreducibility:} shared attachments make surface decoding of the ring finger hard regardless of architecture; prosthetic design should couple ring finger closure mechanically and rely on sEMG only for coarse grip-type selection for this digit. \textbf{Transition-window uncertainty:} worst-case errors concentrate at movement transitions, yet no model produces a calibrated confidence estimate; Monte Carlo dropout gating would allow actuation to slow or freeze during uncertain predictions. \textbf{Peak amplitude smoothing:} all models underestimate peak joint angles (${\approx}$60--80\% of true peaks) due to mean-regression bias; a trajectory-sensitive loss such as Soft-DTW would address this without changing model architecture.
+
+Beyond these failure modes, PET’s external memory stores recurring muscle co-activation patterns in a small set of strongly used memory slots. Unlike recurrent hidden states, these slots can be inspected more directly, giving a clearer view of what movement patterns the model has learned, which may be useful in rehabilitation contexts (see Appendix~\ref{app:attn}).
+
+\subsection{Embedded Deployment: Latency and Energy Trade-offs}
+\label{sec:disc_embedded}
+
+The embedded evaluation exposes a finding invisible from offline benchmarks: the best offline model (CNN-BiLSTM) exceeds the nRF52840's memory budget, and among deployable models the performance ranking is governed by operator-level runtime compatibility rather than offline accuracy. BiLSTM-small achieves 26.6\,ms latency and 466\,$\mu$J/inference because its dominant operation maps directly to hardware-accelerated CMSIS-NN kernels. TCN and PET-small each trace their excess latency to a \emph{single} missing kernel: accumulated \texttt{SpaceToBatchNd} reshape overhead and a float32 
+\texttt{BatchMatMul}, respectively, rather than model complexity. A native INT8 \texttt{BatchMatMul} in CMSIS-NN would make PET-small competitive without any model change.
+
+The 35$\times$ energy span across deployable models dwarfs the 4.4\textdegree{} offline accuracy spread, and at stride-16 cadence the difference in draw between BiLSTM-small and TCN separates a viable wearable from an impractical one. Operator coverage must therefore be assessed alongside parameter count before committing to any architecture for microcontroller deployment.
+
+\subsection{Analogue Front-End and Limitations}
+\label{sec:disc_hardware}
+
+The fabricated sEMG board demonstrates viability for a wrist-worn form factor and power budget. Key remaining challenges are electrode contact reliability during motion, front-end power management, and PCB miniaturisation. Live end-to-end testing is deferred to future work; the board provides a substrate for closed-loop validation once those challenges are addressed.
+
+Several limitations bound the above conclusions. Embedded benchmarks use pre-recorded EMG; the ring-buffer acquisition path was not exercised end-to-end with the custom hardware. Energy figures are estimated from a fixed active-current assumption rather than direct measurement. Finally, the within-subject protocol holds out one repetition from all 27 subjects simultaneously, which is not a true leave-one-subject-out evaluation, and may therefore overestimate generalisation to genuinely unseen users.
+
+%% ═══════════════════════════════════════════════════════════════
+%%  CHAPTER 8 — PROJECT MANAGEMENT
+%% ═══════════════════════════════════════════════════════════════
+\section{Project Management}
+\label{sec:pm}
+
+\subsection{Scope and Evolution}
+
+The project began from a hardware-centric feasibility study proposing a wrist-worn device with inertial measurement units, BLE telemetry, and on-device gesture classification. Within the first few weeks it became clear that this direction was both too broad for a the project and less technically substantive than an sEMG-based approach. The scope was deliberately narrowed and reoriented: sensor choice shifted from IMU to surface electromyography, and the core research question became regression-based digit coordinate localisation rather than classification. The result is a project that is considerably more computational and analytical. Which outputs a multi-architecture deep learning benchmark, an embedded deployment effort, and a proof-of-concept analogue front-end — rather than a fully integrated wearable product. This pivot also brought the work into closer comparison with the existing literature on continuous kinematic estimation, enabling meaningful comparison against published benchmarks.
+
+\subsection{Workstreams and Timeline}
+
+Four workstreams structured the project: (i)~machine learning pipeline development, (ii)~embedded deployment and benchmarking, (iii)~analogue hardware design and fabrication, and (iv)~report writing and analysis. Figure~\ref{fig:gaant} shows how these ran in partial parallel across the 32-week window.
+
+\begin{figure}[H]
+\centering
+% Pure TikZ Gantt: x=0.5cm/week (32 weeks = 16cm = \textwidth for A4 25mm margins)
+%                  y=0.65cm/row, rows numbered 0 (bottom) to 7 (top)
+\begin{tikzpicture}[x=0.5cm, y=0.65cm]
+  % --- Period background ---
+  \fill[gray!10] (0,0) rectangle (10,7.75);
+  \fill[gray!20] (10,0) rectangle (14,7.75);
+  \fill[gray!10] (14,0) rectangle (24,7.75);
+  \fill[gray!20] (24,0) rectangle (29,7.75);
+  \fill[gray!10] (29,0) rectangle (32,7.75);
+  % --- Horizontal row separators ---
+  \foreach \r in {1,...,7} {
+    \draw[gray!30, very thin] (0,\r) -- (32,\r);
+  }
+  % --- Period boundary dividers ---
+  \foreach \w in {10,14,24,29} {
+    \draw[gray!55, dashed, thin] (\w,0) -- (\w,7.75);
+  }
+  % --- Outer border ---
+  \draw[gray!50, thin] (0,0) rectangle (32,7.75);
+  % --- Period header labels ---
+  \node[font=\footnotesize\bfseries] at (5,   8.1) {Term 1};
+  \node[font=\footnotesize\bfseries] at (12,  8.1) {Break};
+  \node[font=\footnotesize\bfseries] at (19,  8.1) {Term 2};
+  \node[font=\scriptsize\bfseries]   at (26.5,8.1) {No Teaching};
+  \node[font=\footnotesize\bfseries] at (30.5,8.1) {T3};
+  % --- Bars (x: 0-based week index; bar for weeks A-B → x=A-1 to x=B) ---
+  % Row 7 — Lit. Review (wks 1–10)
+  \fill[teal!60, rounded corners=2pt] (0,7.1) rectangle (10,7.65);
+  \node[white, font=\scriptsize\bfseries] at (5,7.375) {Lit.\ Review};
+  % Row 6 — Data Prep (wks 2–4)
+  \fill[blue!55, rounded corners=2pt] (1,6.1) rectangle (4,6.65);
+  \node[white, font=\scriptsize\bfseries] at (2.5,6.375) {Data};
+  % Row 5 — Models (wks 4–13)
+  \fill[blue!55, rounded corners=2pt] (3,5.1) rectangle (13,5.65);
+  \node[white, font=\scriptsize\bfseries] at (8,5.375) {Models};
+  % Row 4 — Evaluation (wks 10–15)
+  \fill[blue!55, rounded corners=2pt] (9,4.1) rectangle (15,4.65);
+  \node[white, font=\scriptsize\bfseries] at (12,4.375) {Evaluation};
+  % Row 3 — Quantisation (wks 12–18)
+  \fill[orange!70, rounded corners=2pt] (11,3.1) rectangle (18,3.65);
+  \node[white, font=\scriptsize\bfseries] at (14.5,3.375) {Quantisation};
+  % Row 2 — PCB Design (wks 5–13)
+  \fill[green!55!black!80, rounded corners=2pt] (4,2.1) rectangle (13,2.65);
+  \node[white, font=\scriptsize\bfseries] at (8.5,2.375) {PCB Design};
+  % Row 1 — Fabrication (wks 13–18)
+  \fill[green!55!black!80, rounded corners=2pt] (12,1.1) rectangle (18,1.65);
+  \node[white, font=\scriptsize\bfseries] at (15,1.375) {Fabrication};
+  % Row 0 — Report (wks 16–24)
+  \fill[purple!55, rounded corners=2pt] (15,0.1) rectangle (24,0.65);
+  \node[white, font=\scriptsize\bfseries] at (19.5,0.375) {Report Writing};
+  % --- Legend ---
+  \fill[teal!60]           (0,  -0.9) rectangle (1.0,-0.5);
+  \node[right,font=\scriptsize] at (1.1,-0.7) {Lit.\ Review};
+  \fill[blue!55]           (5.5,-0.9) rectangle (6.5,-0.5);
+  \node[right,font=\scriptsize] at (6.6,-0.7) {ML Pipeline};
+  \fill[orange!70]         (12, -0.9) rectangle (13,-0.5);
+  \node[right,font=\scriptsize] at (13.1,-0.7) {Embedded};
+  \fill[green!55!black!80] (18, -0.9) rectangle (19,-0.5);
+  \node[right,font=\scriptsize] at (19.1,-0.7) {Hardware};
+  \fill[purple!55]         (24, -0.9) rectangle (25,-0.5);
+  \node[right,font=\scriptsize] at (25.1,-0.7) {Report};
+\end{tikzpicture}
+\caption{Project timeline across 32 weeks, colour-coded by workstream.}
+\label{fig:gaant}
+\end{figure}
+
+The machine learning pipeline was the primary workstream. Dataset acquisition and preprocessing were completed by week~4. Five model architectures were designed, implemented, and trained under within-subject and cross-subject protocols; all evaluation results were available by week~12. The embedded deployment workstream ran from week~12 to week~18: three models were quantised to INT8, converted to TFLite format, and benchmarked on the nRF52840 DK. The analogue hardware workstream ran alongside the ML work from week~5, with PCB schematic and layout completed by week~13 and the assembled board received by week~18. Report writing started in earnest from week~16 and continued to submission.
+
+\subsection{Risk Management}
+
+Three technical risks materialised during execution. First, memory overflow on the nRF52840: the full BiLSTM and PET models required 860~kB and 898~kB of flash respectively, both exceeding budget once firmware overhead was included. This was mitigated by defining architecturally downsized variants and verifying memory budgets through the quantisation pipeline before committing to full training runs. Second, TFLM operator incompatibility in PET-small: dynamic \texttt{SHAPE} nodes, a redundant \texttt{DIV}, and the absence of a GELU kernel all prevented deployment. These were resolved through targeted model modifications, an activation function substitution, and a full retrain of the deployment-target architecture. Third, TCN training was terminated at 10 epochs rather than 20 because validation loss had plateaued early; this introduced a minor confound in direct accuracy comparisons with other models and is noted as a limitation. Beyond these, scope was kept under control by fixing the model suite and evaluation protocols at the start of the ML workstream, and hardware risks associated with PCB assembly were managed through standard electrical safety practice.
+
+%% ═══════════════════════════════════════════════════════════════
+%%  CHAPTER 9 — ETHICAL AWARENESS
+%% ═══════════════════════════════════════════════════════════════
+\section{Ethical Awareness}
+\label{sec:ethics}
+
+\subsection{Ethics Approval Status}
+
+No ethical approval was required for this project. The School of Engineering Ethics Questionnaire confirmed at the project outset that the work does not involve human tissue, new data collection from participants, or analysis of non-publicly available personal data. All data used for training, evaluation, and embedded benchmarking are drawn from a publicly released dataset collected under separate ethical oversight.
+
+\subsection{Dataset Ethics}
+
+The NinaPro~DB1 dataset was collected under institutional ethical approval at the University of Applied Sciences and Arts of Western Switzerland, with full informed consent from all 27 participants. This project uses only the publicly available anonymised release. The use of pre-collected public data means no further recruitment or data collection was required within this project.
+
+\subsection{Data Handling}
+
+All dataset files are stored locally on a personal development machine and are not uploaded to external services. The 100-window benchmark set used for embedded evaluation is a subset of NinaPro~DB1 subject~1 and carries no personally identifiable information. Any future live data collection using the custom front-end board would require a thought out anonymisation and data handling pipeline and abiding regulatory standards.
+
+\subsection{Hardware Safety}
+
+Surface EMG electrodes are passive, non-invasive sensors that detect rather than apply electrical signals. The custom analogue front-end operates at 3.3~V from a USB supply and applies no clinically significant current to the body. PCB assembly and testing were conducted in accordance with standard electrical safety practices. Any future deployment of the system in a prosthetic or clinical context would require compliance with IEC~60601-1 medical electrical equipment standards and appropriate regulatory approval before use on patients.
+
+%% ═══════════════════════════════════════════════════════════════
+%%  CHAPTER 10 — CONCLUSION
+%% ═══════════════════════════════════════════════════════════════
+\section{Conclusion and Recommendations for Future Work}
+\label{sec:conclusion}
+
+\subsection{Conclusion}
+
+This project set out to answer whether sEMG signals from the forearm are enough to localise finger positions in real time, and whether the resulting models can actually run on the kind of microcontroller you would put in a wearable. The short answer to both is yes, with caveats worth understanding.
+
+The main things this project found and built:
+
+\begin{itemize}
+    \item \textbf{CNN-BiLSTM is the most accurate offline model}, reaching a within-subject MPJPE of 0.2591 (roughly 16\,mm average joint error). Recurrent models generally do better here because they process every EMG frame individually rather than averaging groups of frames together.
+    \item \textbf{Electrode placement is the dominant bottleneck}, not model design. Every architecture improved 18--24\% when evaluated on the same person it trained on, compared to an unseen user. Better personalisation methods would matter more than a better architecture.
+    \item \textbf{BiLSTM-small is the best embedded model} by a significant margin: 26.6\,ms latency and 466\,$\mu$J per inference. This is fast enough to comfortably meet the real-time deadline with 95\% of the window to spare for wireless transmission and power management.
+    \item \textbf{TCN is the counterintuitive loser on hardware.} Despite convolutions being considered hardware-friendly, dilated convolutions in TFLM require constant data reordering that makes it 35$\times$ more energy-hungry than BiLSTM-small and too slow for real-time stride-16 inference.
+    \item \textbf{Operator compatibility matters as much as parameter count.} PET-small's 293\,ms latency traces to a single missing INT8 kernel for matrix multiplication, not model complexity. This is not visible from offline benchmarks at all.
+    \item \textbf{A working analogue front-end was designed and fabricated}, demonstrating the hardware side of the system is viable. End-to-end live validation is the remaining gap.
+\end{itemize}
+
+Taken together, the results suggest that sEMG-based digit localisation on embedded hardware is tractable for coarse grip control today, and that the path to finer accuracy runs through user calibration and smarter loss functions rather than larger models.
+
+\subsection{Recommendations for Future Work}
+
+Several directions would strengthen and extend this work. First, a real-time closed-loop experiment using the custom front-end board and a live human subject would validate whether the offline accuracy levels are maintained under live acquisition conditions, including electrode motion artefacts. Second, quantisation-aware training (QAT) should be explored for PET-small, as its attention operations are numerically sensitive and may benefit from simulating quantisation error during optimisation. Third, implementing optimised \texttt{BatchMatMul} kernels in CMSIS-NN for the attention-matrix operations would directly reduce PET-small's inference latency, potentially making it competitive with BiLSTM-small. Fourth, a personalisation study (fine-tuning a within-subject model from a cross-subject pre-trained initialisation) would directly address the electrode placement bottleneck identified in the offline results. Finally, extending the framework to additional NinaPro databases (e.g.\ DB2 or DB5, which use different electrode counts and acquisition hardware) and evaluating cross-dataset generalisation would provide a more rigorous assessment of how well these models handle acquisition protocol variation.
+
+\bibliography{bib}
+\bibliographystyle{ieeetr}
+
+\clearpage
+\pagenumbering{Roman}
+\setcounter{page}{1}
+
+\begin{appendices}
+
+%% ─────────────────────────────────────────────────────────────
+%%  APPENDIX A — SUPPLEMENTARY FIGURES
+%% ─────────────────────────────────────────────────────────────
+\section{Supplementary Figures}
+
+\subsection{Per-Joint MPJPE Heatmaps}
+\label{app:heatmaps}
+
+Figures~\ref{fig:heatmap_a} and~\ref{fig:heatmap_b} show per-joint \gls{mpjpe} heatmaps for the remaining models not shown in Figure~\ref{fig:heatmap}. The monotonic \gls{mcp} $\to$ \gls{pip} $\to$ \gls{dip} $\to$ Tip error gradient is consistent across all architectures and model sizes, confirming the kinematic chain amplification effect is an inherent property of the FK pipeline rather than a model-specific failure.
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{transformer_plots/joint_error_heatmap.png}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{pet_plots/joint_error_heatmap.png}
+\end{minipage}
+\caption{Per-joint MPJPE for Transformer (left) and PET (right); both show higher Ring Tip error than CNN-BiLSTM and BiLSTM.}
+\label{fig:heatmap_a}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{tcn_plots/joint_error_heatmap.png}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{bilstm_small_plots/joint_error_heatmap.png}
+\end{minipage}
+\caption{Per-joint MPJPE for TCN (left) and BiLSTM-small (right); compression increases distal errors.}
+\label{fig:heatmap_b}
+\end{figure}
+
+\subsection{Per-Window Error Distributions}
+\label{app:errdist}
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{bilstm_plots/error_distribution.png}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{transformer_plots/error_distribution.png}
+\end{minipage}
+\caption{MPJPE distributions for BiLSTM (left, median 0.2590) and Transformer (right, median 0.2713).}
+\label{fig:errdist_bilstm_trans}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{pet_plots/error_distribution.png}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{tcn_plots/error_distribution.png}
+\end{minipage}
+\caption{MPJPE distributions for PET (left, median 0.2768) and TCN (right, median 0.2852); TCN has the widest right tail.}
+\label{fig:errdist_pet_tcn}
+\end{figure}
+
+\subsection{Data Ablation: Small Model Variants}
+\label{app:ablation}
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.32\textwidth}
+  \includegraphics[width=\linewidth]{bilstm_small_plots/data_ablation.png}
+\end{minipage}\hfill
+\begin{minipage}{0.32\textwidth}
+  \includegraphics[width=\linewidth]{cnnlstm_small_plots/data_ablation.png}
+\end{minipage}\hfill
+\begin{minipage}{0.32\textwidth}
+  \includegraphics[width=\linewidth]{pet_small_plots/data_ablation.png}
+\end{minipage}
+\caption{Data ablation for BiLSTM-small, CNN-BiLSTM-small, and PET-small; BiLSTM-small and CNN-BiLSTM-small saturate above 50\% training data.}
+\label{fig:ablation_small}
+\end{figure}
+
+\subsection{Gradient Norm Traces: PET and CNN-BiLSTM}
+\label{app:gradnorm}
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{pet_plots/grad_norm.png}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{cnnlstm_plots/grad_norm.png}
+\end{minipage}
+\caption{Gradient norms for PET (left) and CNN-BiLSTM (right); both stabilise after an early spike.}
+\label{fig:gradnorm_supp}
+\end{figure}
+
+\subsection{Predicted vs.\ Ground-Truth Angle Overlays: BiLSTM and TCN}
+\label{app:overlays}
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{bilstm_plots/angle_overlays.png}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{tcn_plots/angle_overlays.png}
+\end{minipage}
+\caption{Predicted vs.\ ground-truth angles for BiLSTM (left) and TCN (right).}
+\label{fig:overlays_supp}
+\end{figure}
+
+\subsection{PET External Attention Patterns}
+\label{app:attn}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\linewidth]{pet_plots/branch_diversity.png}
+\caption{PET branch diversity over training; stabilises at 0.25--0.35, confirming complementary branch specialisation.}
+\label{fig:branch_div}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\linewidth]{pet_plots/attention_memory_weights.png}
+\caption{External memory attention weights (Branch~1); ${\approx}$5--8 of 64 slots dominate, encoding recurring co-activation patterns.}
+\label{fig:attn_mem}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{pet_plots/attention_pattern_sample1.png}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{pet_plots/attention_pattern_sample2.png}
+\end{minipage}
+\caption{Attention matrices for two windows (Branch~1, all 4 heads); heads specialise from averaging to sparse event detection.}
+\label{fig:attn_patterns}
+\end{figure}
+
+%% ─────────────────────────────────────────────────────────────
+%%  APPENDIX B — SUPPLEMENTARY TABLES
+%% ─────────────────────────────────────────────────────────────
+\section{Supplementary Tables}
+
+\subsection{TFLM Operator Coverage}
+
+\begin{table}[H]
+\centering
+\caption{Key \gls{tflm} operators per deployed model and CMSIS-NN kernel availability; missing INT8 kernels run in float32 reference code (5--20$\times$ slower).}
+\label{tab:ops}
+\renewcommand{\arraystretch}{0.85}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llll}
+\toprule
+\textbf{Operator} & \textbf{Used by} & \textbf{CMSIS-NN} & \textbf{Note} \\
+\midrule
+\texttt{FullyConnected} & BiLSTM-small & Yes & LSTM gate multiply; INT8 SIMD MACs \\
+\texttt{Conv2D} & TCN, CNN-BiLSTM & Partial & Standard conv optimised; dilated wrapping is not \\
+\texttt{SpaceToBatchNd} / \texttt{BatchToSpaceNd} & TCN & No & Around every dilated Conv2D; dominates TCN latency \\
+\texttt{BatchMatMul} & PET-small & No & External-attention $Q{\cdot}W_d$; float32 reference; dominates PET-small latency \\
+\texttt{Softmax} & PET-small & No & Reference implementation; minor cost \\
+\texttt{SHAPE} & PET-small & No & \texttt{LayerNorm} decomposition; registered via \texttt{resolver.AddShape()} \\
+\texttt{Quantize} / \texttt{Dequantize} & All & Yes & INT8$\leftrightarrow$float32 boundary; negligible cost \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\subsection{Small Model Angle RMSE}
+
+\begin{table}[H]
+\centering
+\caption{Angle RMSE for small model variants; BiLSTM-small matches full BiLSTM despite half the parameters.}
+\label{tab:small_rmse}
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Model} & \textbf{Params} & \textbf{RMSE (\textdegree)} & \textbf{NRMSE} \\
+\midrule
+BiLSTM-small & $\sim$85{,}K & 25.52 & 0.3695 \\
+PET-small    & $\sim$261{,}K & 23.88 & 0.3459 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Full Per-Tip MPJPE Comparison}
+
+\begin{table}[H]
+\centering
+\caption{Per-fingertip MPJPE for all full-size models; Ring Tip is hardest and Thumb/Little Tip easiest across all architectures.}
+\label{tab:tip_mpjpe}
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Model} & \textbf{Thumb Tip} & \textbf{Index Tip} & \textbf{Middle Tip} & \textbf{Ring Tip} & \textbf{Little Tip} \\
+\midrule
+CNN-BiLSTM  & 0.451 & 0.494 & 0.535 & \textbf{0.561} & 0.419 \\
+BiLSTM      & 0.459 & 0.508 & 0.556 & \textbf{0.576} & 0.428 \\
+Transformer & 0.472 & 0.523 & 0.570 & \textbf{0.596} & 0.449 \\
+PET         & 0.474 & 0.541 & 0.593 & \textbf{0.612} & 0.453 \\
+TCN         & 0.483 & 0.565 & 0.626 & \textbf{0.622} & 0.466 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Model Hyperparameters}
+
+See Table~\ref{tab:arch} in the main text (Section~3) for full architecture and training hyperparameter details.
+
+%% ─────────────────────────────────────────────────────────────
+%%  APPENDIX C — SOURCE CODE
+%% ─────────────────────────────────────────────────────────────
+\section{Source Code}
+\label{app:code}
+
+All source code for this project — including the data preprocessing pipeline, model definitions and training scripts, quantisation and conversion tools, embedded firmware, and evaluation utilities — is available at:
+
+\begin{center}
+\url{https://github.com/ege-cavus/dissertation}
+\end{center}
+
+\end{appendices}
+
+\end{document}
