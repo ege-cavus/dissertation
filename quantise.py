@@ -378,13 +378,13 @@ def make_model(name: str) -> nn.Module:
 def checkpoint_path(name: str) -> str:
     """Return the expected checkpoint location based on training script defaults."""
     if name == "tcn":
-        return "best_tcn.pt"
+        return "checkpoints/best_tcn.pt"
     if name == "pet":
-        return "best_pet.pt"
+        return "checkpoints/best_pet.pt"
     if name == "pet_small":
-        return "best_pet_small.pt"
+        return "checkpoints/best_pet_small.pt"
     # other_models.py uses --plot-root (default '.') / best_<name>.pt
-    return f"best_{name}.pt"  # bilstm_small → best_bilstm_small.pt
+    return f"checkpoints/best_{name}.pt"  # bilstm_small → best_bilstm_small.pt
 
 
 # Data loading helpers (minimal — only for representative calibration data)

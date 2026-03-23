@@ -2,7 +2,7 @@
 """Train a TCN to predict 22 hand joint angles from sEMG (Ninapro DB1).
 
 Data dir defaults to ~/Desktop/Ninapro_DB1; override with --data-dir.
-Plots saved to --plot-dir (default: ./tcn_plots/).
+Plots saved to --plot-dir (default: ./plots/tcn/).
 """
 
 import argparse
@@ -741,8 +741,8 @@ def parse_args():
     p.add_argument("--stride",       type=int,   default=16)
     p.add_argument("--ds",           type=int,   default=3)
     p.add_argument("--min-len",      type=int,   default=80)
-    p.add_argument("--save-path",    type=str,   default="best_tcn.pt")
-    p.add_argument("--plot-dir",     type=str,   default="./tcn_plots",
+    p.add_argument("--save-path",    type=str,   default="checkpoints/best_tcn.pt")
+    p.add_argument("--plot-dir",     type=str,   default="./plots/tcn",
                    help="Directory to save all evaluation plots")
     p.add_argument("--ablation-fractions", type=float, nargs="+",
                    default=[0.1, 0.25, 0.5, 0.75, 1.0],

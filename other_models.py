@@ -793,8 +793,9 @@ def plot_model_comparison(results: dict, save_dir: str):
 def train_model(model, model_name, train_dl, val_dl, train_ds, val_ds,
                 loss_fn, args, device):
     """Full training + evaluation + plot generation for one model."""
-    save_dir = os.path.join(args.plot_root, f"{model_name}_plots")
+    save_dir = os.path.join(args.plot_root, model_name)
     os.makedirs(save_dir, exist_ok=True)
+    os.makedirs("checkpoints", exist_ok=True)
 
     opt   = torch.optim.AdamW(model.parameters(), lr=args.lr,
                                weight_decay=args.weight_decay)
@@ -804,7 +805,7 @@ def train_model(model, model_name, train_dl, val_dl, train_ds, val_ds,
     tl_hist, vl_hist, te_hist, ve_hist = [], [], [], []
     gnorms_all = []
     best_mpjpe = float("inf")
-    ckpt_path  = os.path.join(args.plot_root, f"best_{model_name}.pt")
+    ckpt_path  = os.path.join("checkpoints", f"best_{model_name}.pt")
 
     print(f"\n=== Training {model_name.upper()} ({args.epochs} epochs) ===")
     params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -943,7 +944,7 @@ def parse_args():
     p.add_argument("--patch-size",        type=int, default=8,   help="Patch size for Transformer")
     p.add_argument("--ffn-mult",          type=int, default=2,   help="FFN expansion factor")
     # plots / ablation
-    p.add_argument("--plot-root",         type=str, default=".",
+    p.add_argument("--plot-root",         type=str, default="./plots",
                    help="Root directory for per-model plot subdirs")
     p.add_argument("--overlay-joints",    type=int, nargs="+", default=[0, 5, 9])
     p.add_argument("--ablation-fractions",type=float, nargs="+",

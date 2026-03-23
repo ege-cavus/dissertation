@@ -623,10 +623,10 @@ The accuracy results show in distinct training dynamics. CNN-BiLSTM reaches near
 \begin{figure}[H]
 \centering
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{cnnlstm_plots/training_curves.png}
+  \includegraphics[width=\linewidth]{plots/cnnlstm/training_curves.png}
 \end{minipage}\hfill
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{pet_plots/training_curves.png}
+  \includegraphics[width=\linewidth]{plots/pet/training_curves.png}
 \end{minipage}
 \caption{Training and validation loss curves for CNN-BiLSTM (left) and PET (right); both converge without overfitting.}
 \label{fig:training_curves}
@@ -637,10 +637,10 @@ Gradients reveal an important difference. Both BiLSTM and PET show a single init
 \begin{figure}[H]
 \centering
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{bilstm_plots/grad_norm.png}
+  \includegraphics[width=\linewidth]{plots/bilstm/grad_norm.png}
 \end{minipage}\hfill
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{tcn_plots/grad_norm.png}
+  \includegraphics[width=\linewidth]{plots/tcn/grad_norm.png}
 \end{minipage}
 \caption{Gradient norms for BiLSTM (left, stable) and TCN (right, persistent spikes from dilated stacking); PET and CNN-BiLSTM in Appendix~\ref{app:gradnorm}.}
 \label{fig:grad_norms}
@@ -677,10 +677,10 @@ A common finding is that prediction error increases steadily from proximal(MCP) 
 \begin{figure}[H]
 \centering
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{cnnlstm_plots/joint_error_heatmap.png}
+  \includegraphics[width=\linewidth]{plots/cnnlstm/joint_error_heatmap.png}
 \end{minipage}\hfill
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{bilstm_plots/joint_error_heatmap.png}
+  \includegraphics[width=\linewidth]{plots/bilstm/joint_error_heatmap.png}
 \end{minipage}
 \caption{Per-joint MPJPE for CNN-BiLSTM (left) and BiLSTM (right); errors amplify distally along the kinematic chain (remaining models in Appendix~\ref{app:heatmaps}).}
 \label{fig:heatmap}
@@ -693,10 +693,10 @@ The ring finger consistently produces the highest \gls{mpjpe} across all archite
 \begin{figure}[H]
 \centering
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{pet_plots/per_finger_mpjpe.png}
+  \includegraphics[width=\linewidth]{plots/pet/per_finger_mpjpe.png}
 \end{minipage}\hfill
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{cnnlstm_plots/per_finger_mpjpe.png}
+  \includegraphics[width=\linewidth]{plots/cnnlstm/per_finger_mpjpe.png}
 \end{minipage}
 \caption{Per-finger MPJPE for PET (left) and CNN-BiLSTM (right); Ring finger is consistently the hardest to predict across all architectures.}
 \label{fig:per_finger}
@@ -708,7 +708,7 @@ Figure~\ref{fig:errdist} shows the prediction error distribution for CNN-BiLSTM.
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.85\linewidth]{cnnlstm_plots/error_distribution.png}
+\includegraphics[width=0.85\linewidth]{plots/cnnlstm/error_distribution.png}
 \caption{Per-window MPJPE distribution for CNN-BiLSTM (median 0.2525); tail errors concentrate at gesture transitions.}
 \label{fig:errdist}
 \end{figure}
@@ -719,7 +719,7 @@ Figure~\ref{fig:angle_overlays} shows how closely the predicted joint angles fol
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.85\linewidth]{pet_plots/angle_overlays.png}
+\includegraphics[width=0.85\linewidth]{plots/pet/angle_overlays.png}
 \caption{Predicted vs.\ ground-truth joint angles for PET; trajectory shape is captured but peak amplitudes are underestimated.}
 \label{fig:angle_overlays}
 \end{figure}
@@ -965,10 +965,10 @@ Figures~\ref{fig:heatmap_a} and~\ref{fig:heatmap_b} show per-joint \gls{mpjpe} h
 \begin{figure}[H]
 \centering
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{transformer_plots/joint_error_heatmap.png}
+  \includegraphics[width=\linewidth]{plots/transformer/joint_error_heatmap.png}
 \end{minipage}\hfill
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{pet_plots/joint_error_heatmap.png}
+  \includegraphics[width=\linewidth]{plots/pet/joint_error_heatmap.png}
 \end{minipage}
 \caption{Per-joint MPJPE for Transformer (left) and PET (right); both show higher Ring Tip error than CNN-BiLSTM and BiLSTM.}
 \label{fig:heatmap_a}
@@ -977,10 +977,10 @@ Figures~\ref{fig:heatmap_a} and~\ref{fig:heatmap_b} show per-joint \gls{mpjpe} h
 \begin{figure}[H]
 \centering
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{tcn_plots/joint_error_heatmap.png}
+  \includegraphics[width=\linewidth]{plots/tcn/joint_error_heatmap.png}
 \end{minipage}\hfill
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{bilstm_small_plots/joint_error_heatmap.png}
+  \includegraphics[width=\linewidth]{plots/bilstm_small/joint_error_heatmap.png}
 \end{minipage}
 \caption{Per-joint MPJPE for TCN (left) and BiLSTM-small (right); compression increases distal errors.}
 \label{fig:heatmap_b}
@@ -992,10 +992,10 @@ Figures~\ref{fig:heatmap_a} and~\ref{fig:heatmap_b} show per-joint \gls{mpjpe} h
 \begin{figure}[H]
 \centering
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{bilstm_plots/error_distribution.png}
+  \includegraphics[width=\linewidth]{plots/bilstm/error_distribution.png}
 \end{minipage}\hfill
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{transformer_plots/error_distribution.png}
+  \includegraphics[width=\linewidth]{plots/transformer/error_distribution.png}
 \end{minipage}
 \caption{MPJPE distributions for BiLSTM (left, median 0.2590) and Transformer (right, median 0.2713).}
 \label{fig:errdist_bilstm_trans}
@@ -1004,10 +1004,10 @@ Figures~\ref{fig:heatmap_a} and~\ref{fig:heatmap_b} show per-joint \gls{mpjpe} h
 \begin{figure}[H]
 \centering
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{pet_plots/error_distribution.png}
+  \includegraphics[width=\linewidth]{plots/pet/error_distribution.png}
 \end{minipage}\hfill
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{tcn_plots/error_distribution.png}
+  \includegraphics[width=\linewidth]{plots/tcn/error_distribution.png}
 \end{minipage}
 \caption{MPJPE distributions for PET (left, median 0.2768) and TCN (right, median 0.2852); TCN has the widest right tail.}
 \label{fig:errdist_pet_tcn}
@@ -1019,13 +1019,13 @@ Figures~\ref{fig:heatmap_a} and~\ref{fig:heatmap_b} show per-joint \gls{mpjpe} h
 \begin{figure}[H]
 \centering
 \begin{minipage}{0.32\textwidth}
-  \includegraphics[width=\linewidth]{bilstm_small_plots/data_ablation.png}
+  \includegraphics[width=\linewidth]{plots/bilstm_small/data_ablation.png}
 \end{minipage}\hfill
 \begin{minipage}{0.32\textwidth}
-  \includegraphics[width=\linewidth]{cnnlstm_small_plots/data_ablation.png}
+  \includegraphics[width=\linewidth]{plots/cnnlstm_small/data_ablation.png}
 \end{minipage}\hfill
 \begin{minipage}{0.32\textwidth}
-  \includegraphics[width=\linewidth]{pet_small_plots/data_ablation.png}
+  \includegraphics[width=\linewidth]{plots/pet_small/data_ablation.png}
 \end{minipage}
 \caption{Data ablation for BiLSTM-small, CNN-BiLSTM-small, and PET-small; BiLSTM-small and CNN-BiLSTM-small saturate above 50\% training data.}
 \label{fig:ablation_small}
@@ -1037,10 +1037,10 @@ Figures~\ref{fig:heatmap_a} and~\ref{fig:heatmap_b} show per-joint \gls{mpjpe} h
 \begin{figure}[H]
 \centering
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{pet_plots/grad_norm.png}
+  \includegraphics[width=\linewidth]{plots/pet/grad_norm.png}
 \end{minipage}\hfill
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{cnnlstm_plots/grad_norm.png}
+  \includegraphics[width=\linewidth]{plots/cnnlstm/grad_norm.png}
 \end{minipage}
 \caption{Gradient norms for PET (left) and CNN-BiLSTM (right); both stabilise after an early spike.}
 \label{fig:gradnorm_supp}
@@ -1052,10 +1052,10 @@ Figures~\ref{fig:heatmap_a} and~\ref{fig:heatmap_b} show per-joint \gls{mpjpe} h
 \begin{figure}[H]
 \centering
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{bilstm_plots/angle_overlays.png}
+  \includegraphics[width=\linewidth]{plots/bilstm/angle_overlays.png}
 \end{minipage}\hfill
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{tcn_plots/angle_overlays.png}
+  \includegraphics[width=\linewidth]{plots/tcn/angle_overlays.png}
 \end{minipage}
 \caption{Predicted vs.\ ground-truth angles for BiLSTM (left) and TCN (right).}
 \label{fig:overlays_supp}
@@ -1066,14 +1066,14 @@ Figures~\ref{fig:heatmap_a} and~\ref{fig:heatmap_b} show per-joint \gls{mpjpe} h
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.72\linewidth]{pet_plots/branch_diversity.png}
+\includegraphics[width=0.72\linewidth]{plots/pet/branch_diversity.png}
 \caption{PET branch diversity over training; stabilises at 0.25--0.35, confirming complementary branch specialisation.}
 \label{fig:branch_div}
 \end{figure}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.72\linewidth]{pet_plots/attention_memory_weights.png}
+\includegraphics[width=0.72\linewidth]{plots/pet/attention_memory_weights.png}
 \caption{External memory attention weights (Branch~1); ${\approx}$5--8 of 64 slots dominate, encoding recurring co-activation patterns.}
 \label{fig:attn_mem}
 \end{figure}
@@ -1081,10 +1081,10 @@ Figures~\ref{fig:heatmap_a} and~\ref{fig:heatmap_b} show per-joint \gls{mpjpe} h
 \begin{figure}[H]
 \centering
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{pet_plots/attention_pattern_sample1.png}
+  \includegraphics[width=\linewidth]{plots/pet/attention_pattern_sample1.png}
 \end{minipage}\hfill
 \begin{minipage}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{pet_plots/attention_pattern_sample2.png}
+  \includegraphics[width=\linewidth]{plots/pet/attention_pattern_sample2.png}
 \end{minipage}
 \caption{Attention matrices for two windows (Branch~1, all 4 heads); heads specialise from averaging to sparse event detection.}
 \label{fig:attn_patterns}

@@ -920,7 +920,7 @@ def parse_args():
     p.add_argument("--batch-size",    type=int,   default=128)
     p.add_argument("--lr",            type=float, default=1e-3)
     p.add_argument("--weight-decay",  type=float, default=5e-4)
-    p.add_argument("--save-path",     type=str,   default="best_pet.pt")
+    p.add_argument("--save-path",     type=str,   default="checkpoints/best_pet.pt")
     # model
     p.add_argument("--d-model",       type=int,   default=128,  help="Embedding dimension")
     p.add_argument("--n-heads",       type=int,   default=4,    help="Attention heads per branch")
@@ -933,7 +933,7 @@ def parse_args():
                    help="FFN activation (use relu for TFLM deployment, gelu for full model)")
     p.add_argument("--dropout",       type=float, default=0.2)
     # plots / ablation
-    p.add_argument("--plot-dir",      type=str,   default="./pet_plots")
+    p.add_argument("--plot-dir",      type=str,   default="./plots/pet")
     p.add_argument("--overlay-joints",type=int,   nargs="+", default=[0,5,9])
     p.add_argument("--ablation-fractions", type=float, nargs="+", default=[0.1,0.25,0.5,0.75,1.0])
     p.add_argument("--ablation-epochs",    type=int,   default=5)
